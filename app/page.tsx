@@ -4,6 +4,7 @@ import {
   ChangeEvent,
   ClipboardEvent as ReactClipboardEvent,
   DragEvent,
+  PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useRef,
@@ -287,6 +288,7 @@ const TYPE_COPY = {
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number; layer: "product" | "product2" } | null>(null);
   const [template, setTemplate] = useState<TemplateType>("badge");
   const [objectSide, setObjectSide] = useState<ObjectSide>("right");
   const [product, setProduct] = useState<AssetState>(EMPTY_ASSET);
@@ -305,6 +307,8 @@ export default function Home() {
   const [product2Scale, setProduct2Scale] = useState(82);
   const [product2X, setProduct2X] = useState(62);
   const [product2Y, setProduct2Y] = useState(18);
+  const [activeProduct, setActiveProduct] = useState<"product" | "product2">("product");
+  const [isDragging, setIsDragging] = useState(false);
   const [showGuides, setShowGuides] = useState(true);
   const [notice, setNotice] = useState("");
   const [fileBytes, setFileBytes] = useState<number | null>(null);
@@ -365,7 +369,7 @@ export default function Home() {
       ctx.font = "800 26px Pretendard, 'Noto Sans KR', sans-serif";
       ctx.fillText(badgeText.trim() || "10%", flagX + 32, 28, 58);
     } else {
-      const productBox = { x: 330, y: 0, width: 273, height: 258 };
+      const productBox = { x: 248, y: 0, width: 438, height: 258 };
       if (product.image) drawContainedImage(ctx, product.image, productBox, productScale, productX, productY);
       if (product2.image) drawContainedImage(ctx, product2.image, productBox, product2Scale, product2X, product2Y);
 
@@ -464,6 +468,7 @@ export default function Home() {
         return next;
       });
       await saveAsset(key, file);
+      if (key === "product" || key === "product2") setActiveProduct(key);
       setNotice(`${key === "advertiser" ? "광고주체 이미지" : key === "product2" ? "상품 이미지 2" : "상품 이미지 1"}를 적용했습니다.`);
     }).catch(() => setNotice("이미지 파일을 읽지 못했습니다. PNG, JPG 또는 WEBP 파일을 사용해주세요."));
   }
@@ -503,6 +508,46 @@ export default function Home() {
       setMainCopy("니니즈 쫀득쫀득 촉감의 매력");
       setSubCopy("오늘만 10% 추가적립");
     }
+  }
+
+  function startObjectDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const layer = activeProduct === "product2" && product2.image
+      ? "product2"
+      : product.image
+        ? "product"
+        : product2.image
+          ? "product2"
+          : null;
+    if (!layer) return;
+    const originX = layer === "product" ? productX : product2X;
+    const originY = layer === "product" ? productY : product2Y;
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX, originY, layer };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setActiveProduct(layer);
+    setIsDragging(true);
+    event.preventDefault();
+  }
+
+  function moveObjectDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const deltaX = (event.clientX - drag.startX) * (WIDTH / rect.width);
+    const deltaY = (event.clientY - drag.startY) * (HEIGHT / rect.height);
+    if (drag.layer === "product") {
+      setProductX(Math.round(Math.max(-120, Math.min(120, drag.originX + deltaX))));
+      setProductY(Math.round(Math.max(-90, Math.min(90, drag.originY + deltaY))));
+    } else {
+      setProduct2X(Math.round(Math.max(-150, Math.min(150, drag.originX + deltaX))));
+      setProduct2Y(Math.round(Math.max(-100, Math.min(100, drag.originY + deltaY))));
+    }
+  }
+
+  function endObjectDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setIsDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
   function reset() {
@@ -654,15 +699,31 @@ export default function Home() {
           </aside>
 
           <div className="preview-panel">
-            <div className="preview-title"><div><span>LIVE PREVIEW</span><h3>{typeInfo.title}</h3></div><label><input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> 가이드 영역</label></div>
+            <div className="preview-title"><div><span>LIVE PREVIEW</span><h3>{typeInfo.title}</h3></div>{template === "center" && <span className="center-area-chip">실제 삽입 영역 438×258 · 50% 중앙선</span>}<label><input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> 가이드 영역</label></div>
+            <div className="drag-toolbar">
+              <span>미리보기에서 이동할 이미지</span>
+              <div>
+                <button type="button" disabled={!product.image} className={activeProduct === "product" ? "active" : ""} onClick={() => setActiveProduct("product")}>이미지 1</button>
+                <button type="button" disabled={!product2.image} className={activeProduct === "product2" ? "active" : ""} onClick={() => setActiveProduct("product2")}>이미지 2</button>
+              </div>
+              <small>이미지를 선택한 뒤 가이드 영역을 드래그하세요.</small>
+            </div>
             <div className="preview-stage">
               <div className="creative-frame">
                 <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="카카오 비즈보드 소재 미리보기" />
                 {!product.image && !product2.image && <div className={`product-placeholder ${template} ${objectSide}`}>상품 이미지 1 · 2</div>}
+                <div
+                  className={`canvas-drag-surface ${isDragging ? "dragging" : ""}`}
+                  onPointerDown={startObjectDrag}
+                  onPointerMove={moveObjectDrag}
+                  onPointerUp={endObjectDrag}
+                  onPointerCancel={endObjectDrag}
+                  aria-label={`${activeProduct === "product" ? "상품 이미지 1" : "상품 이미지 2"} 드래그 이동 영역`}
+                />
                 {showGuides && (
                   <div className={`guide-overlay ${template} ${objectSide}`}>
                     <div className="guide-copy"><span>카피 영역</span></div>
-                    <div className="guide-object"><span>오브젝트 최대 438×258</span></div>
+                    <div className="guide-object"><span>{template === "center" ? "실제 오브젝트 삽입 영역 438×258" : "오브젝트 최대 438×258"}</span>{template === "center" && <i className="object-half-line"><b>50% 중앙선</b></i>}</div>
                     <div className="guide-ad"><span>광고주체</span></div>
                     {template === "badge" && <div className="guide-flag"><span>배지</span></div>}
                   </div>
