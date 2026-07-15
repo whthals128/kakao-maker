@@ -1,67 +1,147 @@
+const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
+
+function normalizedRegion(region) {
+  if (!region) return null;
+  const left = clamp(region.x, 0, 1);
+  const top = clamp(region.y, 0, 1);
+  const right = clamp(region.x + region.width, left, 1);
+  const bottom = clamp(region.y + region.height, top, 1);
+  return { left, top, right, bottom };
+}
+
+function backgroundRect(targetWidth, targetHeight, imageWidth, imageHeight) {
+  const bleed = Math.max(targetWidth, targetHeight) * .08;
+  const scale = Math.max((targetWidth + bleed * 2) / imageWidth, (targetHeight + bleed * 2) / imageHeight);
+  const width = imageWidth * scale;
+  const height = imageHeight * scale;
+  return { x: (targetWidth - width) / 2, y: (targetHeight - height) / 2, width, height, bleed };
+}
+
+function boundsFor(region, foreground, imageWidth, imageHeight) {
+  if (!region) return null;
+  const scale = foreground.width / imageWidth;
+  return {
+    left: foreground.x + region.left * imageWidth * scale,
+    top: foreground.y + region.top * imageHeight * scale,
+    right: foreground.x + region.right * imageWidth * scale,
+    bottom: foreground.y + region.bottom * imageHeight * scale,
+  };
+}
+
+function fitPlan({ mode, region, targetWidth, targetHeight, imageWidth, imageHeight }) {
+  const insetRatio = mode === "extend" ? .06 : 0;
+  const insetX = targetWidth * insetRatio;
+  const insetY = targetHeight * insetRatio;
+  const availableWidth = targetWidth - insetX * 2;
+  const availableHeight = targetHeight - insetY * 2;
+  let scale = Math.min(availableWidth / imageWidth, availableHeight / imageHeight);
+
+  if (region) {
+    const focusX = (region.left + region.right) / 2 * imageWidth;
+    const focusY = (region.top + region.bottom) / 2 * imageHeight;
+    const horizontalSpace = targetWidth / 2 - insetX;
+    const verticalSpace = targetHeight / 2 - insetY;
+    const focusLimits = [
+      horizontalSpace / Math.max(1, focusX),
+      horizontalSpace / Math.max(1, imageWidth - focusX),
+      verticalSpace / Math.max(1, focusY),
+      verticalSpace / Math.max(1, imageHeight - focusY),
+    ];
+    scale = Math.min(scale, ...focusLimits);
+  }
+
+  const width = imageWidth * scale;
+  const height = imageHeight * scale;
+  const focusX = region ? (region.left + region.right) / 2 * imageWidth : imageWidth / 2;
+  const focusY = region ? (region.top + region.bottom) / 2 * imageHeight : imageHeight / 2;
+  const foreground = {
+    x: targetWidth / 2 - focusX * scale,
+    y: targetHeight / 2 - focusY * scale,
+    width,
+    height,
+  };
+
+  return {
+    mode,
+    foreground,
+    background: mode === "extend" ? backgroundRect(targetWidth, targetHeight, imageWidth, imageHeight) : null,
+    protectedBounds: boundsFor(region, foreground, imageWidth, imageHeight),
+    fallback: null,
+    canFullyProtect: true,
+    verticalTravel: { up: 0, down: 0, total: 0 },
+  };
+}
+
+function cropRange({ region, targetWidth, targetHeight, imageWidth, imageHeight, insetRatio }) {
+  const scale = Math.max(targetWidth / imageWidth, targetHeight / imageHeight);
+  const width = imageWidth * scale;
+  const height = imageHeight * scale;
+  const insetX = targetWidth * insetRatio;
+  const insetY = targetHeight * insetRatio;
+  const regionLeft = region.left * imageWidth * scale;
+  const regionTop = region.top * imageHeight * scale;
+  const regionRight = region.right * imageWidth * scale;
+  const regionBottom = region.bottom * imageHeight * scale;
+  const minimumX = Math.max(targetWidth - width, insetX - regionLeft);
+  const maximumX = Math.min(0, targetWidth - insetX - regionRight);
+  const minimumY = Math.max(targetHeight - height, insetY - regionTop);
+  const maximumY = Math.min(0, targetHeight - insetY - regionBottom);
+  return { scale, width, height, insetX, insetY, regionLeft, regionTop, regionRight, regionBottom, minimumX, maximumX, minimumY, maximumY, feasible: minimumX <= maximumX && minimumY <= maximumY };
+}
+
 /**
- * Places an image so the complete user-selected region stays inside the output.
- * A target-relative safety inset is reserved on every side of the region.
- *
+ * Produces one render plan used by both the result preview and PNG export.
  * @param {{
- *   region: { x: number, y: number, width: number, height: number },
+ *   mode: "preserve" | "extend" | "crop",
+ *   region?: { x: number, y: number, width: number, height: number } | null,
  *   targetWidth: number,
  *   targetHeight: number,
  *   imageWidth: number,
  *   imageHeight: number,
- *   safetyInset?: number,
+ *   verticalOffset?: number,
  * }} input
  */
-export function computeProtectedPlacement({
-  region,
-  targetWidth,
-  targetHeight,
-  imageWidth,
-  imageHeight,
-  safetyInset = .04,
-}) {
-  const left = Math.max(0, Math.min(1, region.x));
-  const top = Math.max(0, Math.min(1, region.y));
-  const right = Math.max(left, Math.min(1, region.x + region.width));
-  const bottom = Math.max(top, Math.min(1, region.y + region.height));
-  const regionWidth = Math.max(1, (right - left) * imageWidth);
-  const regionHeight = Math.max(1, (bottom - top) * imageHeight);
-  const insetX = Math.min(targetWidth * safetyInset, targetWidth * .2);
-  const insetY = Math.min(targetHeight * safetyInset, targetHeight * .2);
-  const availableWidth = Math.max(1, targetWidth - insetX * 2);
-  const availableHeight = Math.max(1, targetHeight - insetY * 2);
+export function computePlacement({ mode, region: rawRegion, targetWidth, targetHeight, imageWidth, imageHeight, verticalOffset = 0 }) {
+  const region = normalizedRegion(rawRegion);
+  if (mode !== "crop") return fitPlan({ mode, region, targetWidth, targetHeight, imageWidth, imageHeight });
 
-  const coverScale = Math.max(targetWidth / imageWidth, targetHeight / imageHeight);
-  const protectedScale = Math.min(availableWidth / regionWidth, availableHeight / regionHeight);
-  const scale = Math.min(coverScale, protectedScale);
-  const width = imageWidth * scale;
-  const height = imageHeight * scale;
-  const regionLeft = left * imageWidth * scale;
-  const regionTop = top * imageHeight * scale;
-  const regionRight = right * imageWidth * scale;
-  const regionBottom = bottom * imageHeight * scale;
+  if (!region) {
+    const scale = Math.max(targetWidth / imageWidth, targetHeight / imageHeight);
+    const width = imageWidth * scale;
+    const height = imageHeight * scale;
+    const x = (targetWidth - width) / 2;
+    const minimumY = targetHeight - height;
+    const maximumY = 0;
+    const baseY = (minimumY + maximumY) / 2;
+    const offset = clamp(verticalOffset, -1, 1);
+    const y = offset < 0 ? baseY + (-offset) * (minimumY - baseY) : baseY + offset * (maximumY - baseY);
+    return { mode, foreground: { x, y, width, height }, background: null, protectedBounds: null, fallback: null, canFullyProtect: true, verticalTravel: { up: baseY - minimumY, down: maximumY - baseY, total: maximumY - minimumY } };
+  }
 
-  const desiredX = targetWidth / 2 - (regionLeft + regionRight) / 2;
-  const desiredY = targetHeight / 2 - (regionTop + regionBottom) / 2;
-  const minimumX = insetX - regionLeft;
-  const maximumX = targetWidth - insetX - regionRight;
-  const minimumY = insetY - regionTop;
-  const maximumY = targetHeight - insetY - regionBottom;
-  const x = Math.max(minimumX, Math.min(maximumX, desiredX));
-  const y = Math.max(minimumY, Math.min(maximumY, desiredY));
+  let range = cropRange({ region, targetWidth, targetHeight, imageWidth, imageHeight, insetRatio: .04 });
+  if (!range.feasible) range = cropRange({ region, targetWidth, targetHeight, imageWidth, imageHeight, insetRatio: 0 });
 
+  if (!range.feasible) {
+    const fallback = fitPlan({ mode: "extend", region, targetWidth, targetHeight, imageWidth, imageHeight });
+    return { ...fallback, mode, fallback: "extend", canFullyProtect: true };
+  }
+
+  const focusX = (range.regionLeft + range.regionRight) / 2;
+  const focusY = (range.regionTop + range.regionBottom) / 2;
+  const baseX = clamp(targetWidth / 2 - focusX, range.minimumX, range.maximumX);
+  const baseY = clamp(targetHeight / 2 - focusY, range.minimumY, range.maximumY);
+  const offset = clamp(verticalOffset, -1, 1);
+  const y = offset < 0
+    ? baseY + (-offset) * (range.minimumY - baseY)
+    : baseY + offset * (range.maximumY - baseY);
+  const foreground = { x: baseX, y, width: range.width, height: range.height };
   return {
-    x,
-    y,
-    width,
-    height,
-    scale,
-    insetX,
-    insetY,
-    protectedBounds: {
-      left: x + regionLeft,
-      top: y + regionTop,
-      right: x + regionRight,
-      bottom: y + regionBottom,
-    },
+    mode,
+    foreground,
+    background: null,
+    protectedBounds: boundsFor(region, foreground, imageWidth, imageHeight),
+    fallback: null,
+    canFullyProtect: true,
+    verticalTravel: { up: baseY - range.minimumY, down: range.maximumY - baseY, total: range.maximumY - range.minimumY },
   };
 }

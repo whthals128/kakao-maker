@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
-import { computeProtectedPlacement } from "./protected-placement.js";
+import { computePlacement } from "./protected-placement.js";
 
 type Channel = "meta" | "google" | "kakao" | "naver" | "brand" | "custom";
 type Strategy = "preserve" | "extend" | "crop";
@@ -89,6 +89,7 @@ export default function Home() {
   const [generated, setGenerated] = useState(false);
   const [globalRequest, setGlobalRequest] = useState("");
   const [strategies, setStrategies] = useState<Record<string, Strategy>>({});
+  const [cropYOffsets, setCropYOffsets] = useState<Record<string, number>>({});
   const [openRequests, setOpenRequests] = useState<string[]>([]);
   const [cardRequests, setCardRequests] = useState<Record<string, string>>({});
   const [savedRequests, setSavedRequests] = useState<string[]>([]);
@@ -137,6 +138,7 @@ export default function Home() {
     setSourceSize({ width: 0, height: 0 });
     setProtectedRegion(null);
     setProtectMode(false);
+    setCropYOffsets({});
     setGenerated(false);
   }
 
@@ -245,9 +247,17 @@ export default function Home() {
     setStrategies((current) => ({ ...current, [id]: strategy }));
   }
 
-  function protectedCropPlacement(targetWidth: number, targetHeight: number, imageWidth = sourceSize.width, imageHeight = sourceSize.height) {
-    if (!protectedRegion || !imageWidth || !imageHeight) return null;
-    return computeProtectedPlacement({ region: protectedRegion, targetWidth, targetHeight, imageWidth, imageHeight });
+  function placementFor(size: AdSize, strategy: Strategy, imageWidth = sourceSize.width, imageHeight = sourceSize.height) {
+    if (!imageWidth || !imageHeight) return null;
+    return computePlacement({
+      mode: strategy,
+      region: protectedRegion,
+      targetWidth: size.width,
+      targetHeight: size.height,
+      imageWidth,
+      imageHeight,
+      verticalOffset: (cropYOffsets[size.id] || 0) / 100,
+    });
   }
 
   function generate() {
@@ -267,31 +277,18 @@ export default function Home() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const strategy = strategyFor(size);
-    const sourceRatio = image.naturalWidth / image.naturalHeight;
-    const targetRatio = size.width / size.height;
-    const cover = strategy === "crop";
-    const protectedPlacement = cover ? protectedCropPlacement(size.width, size.height, image.naturalWidth, image.naturalHeight) : null;
+    const plan = placementFor(size, strategy, image.naturalWidth, image.naturalHeight);
+    if (!plan) return;
 
-    if (strategy === "extend" || protectedPlacement) {
-      const bgScale = targetRatio > sourceRatio ? size.width / image.naturalWidth : size.height / image.naturalHeight;
-      const bgWidth = image.naturalWidth * bgScale;
-      const bgHeight = image.naturalHeight * bgScale;
+    ctx.fillStyle = "#eceef2";
+    ctx.fillRect(0, 0, size.width, size.height);
+    if (plan.background) {
+      ctx.save();
       ctx.filter = `blur(${Math.max(size.width, size.height) * 0.025}px) brightness(.72)`;
-      ctx.drawImage(image, (size.width - bgWidth) / 2, (size.height - bgHeight) / 2, bgWidth, bgHeight);
-      ctx.filter = "none";
-    } else {
-      ctx.fillStyle = "#eef0f5";
-      ctx.fillRect(0, 0, size.width, size.height);
+      ctx.drawImage(image, plan.background.x, plan.background.y, plan.background.width, plan.background.height);
+      ctx.restore();
     }
-
-    const scale = cover
-      ? (targetRatio > sourceRatio ? size.width / image.naturalWidth : size.height / image.naturalHeight)
-      : (targetRatio > sourceRatio ? size.height / image.naturalHeight : size.width / image.naturalWidth);
-    const drawWidth = protectedPlacement?.width ?? image.naturalWidth * scale;
-    const drawHeight = protectedPlacement?.height ?? image.naturalHeight * scale;
-    const drawX = protectedPlacement?.x ?? (size.width - drawWidth) / 2;
-    const drawY = protectedPlacement?.y ?? (size.height - drawHeight) / 2;
-    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+    ctx.drawImage(image, plan.foreground.x, plan.foreground.y, plan.foreground.width, plan.foreground.height);
 
     const link = document.createElement("a");
     link.download = `${file?.name.replace(/\.[^.]+$/, "") || "creative"}_${size.width}x${size.height}.png`;
@@ -351,7 +348,7 @@ export default function Home() {
               </div>
               <div className="source-info">
                 <div><strong>{file?.name}</strong><span>{sourceSize.width} × {sourceSize.height}px</span></div>
-                <div className="source-buttons"><button disabled={!sourceSize.width} className={protectedRegion ? "region-active" : ""} onClick={() => { setProtectMode(true); setProtectedRegion(null); }}>⌗ {protectedRegion ? "제품 범위 다시 지정" : "제품 범위 지정"}</button><button onClick={() => inputRef.current?.click()}>이미지 교체</button></div>
+                <div className="source-buttons"><button disabled={!sourceSize.width} className={protectedRegion ? "region-active" : ""} onClick={() => { setProtectMode(true); setProtectedRegion(null); setCropYOffsets({}); }}>⌗ {protectedRegion ? "제품 범위 다시 지정" : "제품 범위 지정"}</button><button onClick={() => inputRef.current?.click()}>이미지 교체</button></div>
               </div>
               <span className="original-badge">원본</span>
             </div>
@@ -425,28 +422,46 @@ export default function Home() {
             {selectedSizes.map((size) => {
               const strategy = strategyFor(size);
               const requestOpen = openRequests.includes(size.id);
-              const protectedPlacement = strategy === "crop" ? protectedCropPlacement(size.width, size.height) : null;
-              const placementStyle = protectedPlacement ? {
-                left: `${protectedPlacement.x / size.width * 100}%`,
-                top: `${protectedPlacement.y / size.height * 100}%`,
-                width: `${protectedPlacement.width / size.width * 100}%`,
-                height: `${protectedPlacement.height / size.height * 100}%`,
+              const plan = placementFor(size, strategy);
+              if (!plan) return null;
+              const placementStyle = {
+                left: `${plan.foreground.x / size.width * 100}%`,
+                top: `${plan.foreground.y / size.height * 100}%`,
+                width: `${plan.foreground.width / size.width * 100}%`,
+                height: `${plan.foreground.height / size.height * 100}%`,
+              };
+              const backgroundStyle = plan.background ? {
+                left: `${plan.background.x / size.width * 100}%`,
+                top: `${plan.background.y / size.height * 100}%`,
+                width: `${plan.background.width / size.width * 100}%`,
+                height: `${plan.background.height / size.height * 100}%`,
               } : undefined;
+              const cropOffset = cropYOffsets[size.id] || 0;
+              const canMoveVertically = strategy === "crop" && !plan.fallback && plan.verticalTravel.total > .5;
+              const positionLabel = cropOffset === 0 ? "가운데" : cropOffset < 0 ? `위 ${Math.abs(cropOffset)}%` : `아래 ${cropOffset}%`;
               return (
                 <article className="result-card" key={size.id}>
                   <div className={`result-preview strategy-${strategy}`} style={{ aspectRatio: `${size.width} / ${size.height}` }}>
-                    {(strategy === "extend" || protectedPlacement) && <img className="blur-layer" src={imageUrl} alt="" />}
-                    <img className={`main-layer ${protectedPlacement ? "protected-placement" : ""}`} src={imageUrl} alt={`${size.name} 미리보기`} style={placementStyle} />
+                    {plan.background && <img className="blur-layer" src={imageUrl} alt="" style={backgroundStyle} />}
+                    <img className="main-layer placed-layer" src={imageUrl} alt={`${size.name} 미리보기`} style={placementStyle} />
                     {size.id === "naver-mobile" && <span className="safe-zone">안전 영역</span>}
-                    {protectedRegion && <span className="focus-indicator">⌗ 보호영역 전체 보존</span>}
+                    {protectedRegion && <span className="focus-indicator">⌗ {plan.fallback ? "보호영역 우선 · 배경확장" : strategy === "crop" ? "보호영역 중앙" : "보호영역 고정"}</span>}
                   </div>
                   <div className="result-body">
-                    <div className="result-title"><div><strong>{size.name}</strong><span>{size.width} × {size.height} · {CHANNEL_LABEL[size.channel]}</span></div><span className={`strategy-badge ${strategy}`}>{strategy === "preserve" ? "원본 유지" : strategy === "extend" ? "배경 확장" : protectedPlacement ? "보호영역 고정" : "스마트 크롭"}</span></div>
+                    <div className="result-title"><div><strong>{size.name}</strong><span>{size.width} × {size.height} · {CHANNEL_LABEL[size.channel]}</span></div><span className={`strategy-badge ${plan.fallback ? "extend" : strategy}`}>{plan.fallback ? "보호 우선 확장" : strategy === "preserve" ? protectedRegion ? "보호영역 맞춤" : "원본 맞춤" : strategy === "extend" ? "블러 배경 확장" : protectedRegion ? "보호영역 크롭" : "가운데 크롭"}</span></div>
                     <div className="strategy-control" aria-label={`${size.name} 맞춤 방식`}>
                       <button className={strategy === "preserve" ? "active" : ""} onClick={() => setStrategy(size.id, "preserve")}>원본 맞춤</button>
                       <button className={strategy === "extend" ? "active" : ""} onClick={() => setStrategy(size.id, "extend")}>배경 확장</button>
                       <button className={strategy === "crop" ? "active" : ""} onClick={() => setStrategy(size.id, "crop")}>크롭</button>
                     </div>
+                    <p className="mode-description">{strategy === "preserve" ? "원본 전체를 담고 보호영역을 가운데에 고정해요." : strategy === "extend" ? "원본 전체를 담고 빈 공간을 흐린 배경으로 확장해요." : plan.fallback ? "보호영역이 지면보다 커서 자르지 않고 배경을 확장했어요." : "보호영역을 가운데에 두고 지면을 가득 채워요."}</p>
+                    {strategy === "crop" && (
+                      <div className={`crop-position-control ${canMoveVertically ? "" : "disabled"}`}>
+                        <div><label htmlFor={`crop-y-${size.id}`}>제품 상하 위치 <strong>{positionLabel}</strong></label><button disabled={cropOffset === 0} onClick={() => setCropYOffsets((current) => ({ ...current, [size.id]: 0 }))}>가운데로</button></div>
+                        <div className="position-slider"><span>위</span><input id={`crop-y-${size.id}`} type="range" min="-100" max="100" step="1" value={cropOffset} disabled={!canMoveVertically} onChange={(event) => setCropYOffsets((current) => ({ ...current, [size.id]: Number(event.target.value) }))} /><span>아래</span></div>
+                        <small>{plan.fallback ? "보호영역이 잘리지 않도록 배경 확장으로 전환됐어요." : canMoveVertically ? "보호영역이 잘리지 않는 범위에서만 이동해요." : "이 규격에서는 이동할 수 있는 여유가 없어요."}</small>
+                      </div>
+                    )}
                     <div className="result-actions">
                       <button className="request-button" onClick={() => setOpenRequests((current) => current.includes(size.id) ? current.filter((id) => id !== size.id) : [...current, size.id])}>✦ 이 사이즈 수정 요청</button>
                       <button className="download-button" onClick={() => downloadOutput(size)}>↓ PNG</button>
