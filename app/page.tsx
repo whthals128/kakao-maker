@@ -5,6 +5,7 @@ import { ChangeEvent, DragEvent, PointerEvent as ReactPointerEvent, useEffect, u
 type Channel = "meta" | "google" | "kakao" | "naver" | "brand" | "custom";
 type Strategy = "preserve" | "extend" | "crop";
 type ProtectedRegion = { x: number; y: number; width: number; height: number };
+type ImagePlacement = { x: number; y: number; width: number; height: number; needsBackdrop: boolean };
 type AdSize = {
   id: string;
   channel: Channel;
@@ -231,6 +232,37 @@ export default function Home() {
     setStrategies((current) => ({ ...current, [id]: strategy }));
   }
 
+  function protectedCropPlacement(targetWidth: number, targetHeight: number, imageWidth = sourceSize.width, imageHeight = sourceSize.height): ImagePlacement | null {
+    if (!protectedRegion || !imageWidth || !imageHeight) return null;
+
+    // Give the user-drawn box a small safety margin so the product never sits on a crop edge.
+    const margin = .015;
+    const left = Math.max(0, protectedRegion.x - margin);
+    const top = Math.max(0, protectedRegion.y - margin);
+    const right = Math.min(1, protectedRegion.x + protectedRegion.width + margin);
+    const bottom = Math.min(1, protectedRegion.y + protectedRegion.height + margin);
+    const regionWidth = Math.max(.001, right - left) * imageWidth;
+    const regionHeight = Math.max(.001, bottom - top) * imageHeight;
+    const coverScale = Math.max(targetWidth / imageWidth, targetHeight / imageHeight);
+    const keepRegionScale = Math.min(targetWidth / regionWidth, targetHeight / regionHeight);
+    const scale = Math.min(coverScale, keepRegionScale);
+    const width = imageWidth * scale;
+    const height = imageHeight * scale;
+    const desiredX = targetWidth / 2 - ((left + right) / 2) * imageWidth * scale;
+    const desiredY = targetHeight / 2 - ((top + bottom) / 2) * imageHeight * scale;
+
+    const placeAxis = (target: number, drawn: number, start: number, end: number, desired: number) => {
+      if (drawn <= target) return (target - drawn) / 2;
+      const minimum = Math.max(target - drawn, -start);
+      const maximum = Math.min(0, target - end);
+      return Math.max(minimum, Math.min(maximum, desired));
+    };
+
+    const x = placeAxis(targetWidth, width, left * imageWidth * scale, right * imageWidth * scale, desiredX);
+    const y = placeAxis(targetHeight, height, top * imageHeight * scale, bottom * imageHeight * scale, desiredY);
+    return { x, y, width, height, needsBackdrop: width < targetWidth - .5 || height < targetHeight - .5 };
+  }
+
   function generate() {
     if (!file || selected.length === 0) return;
     setGenerated(true);
@@ -251,8 +283,9 @@ export default function Home() {
     const sourceRatio = image.naturalWidth / image.naturalHeight;
     const targetRatio = size.width / size.height;
     const cover = strategy === "crop";
+    const protectedPlacement = cover ? protectedCropPlacement(size.width, size.height, image.naturalWidth, image.naturalHeight) : null;
 
-    if (strategy === "extend") {
+    if (strategy === "extend" || protectedPlacement?.needsBackdrop) {
       const bgScale = targetRatio > sourceRatio ? size.width / image.naturalWidth : size.height / image.naturalHeight;
       const bgWidth = image.naturalWidth * bgScale;
       const bgHeight = image.naturalHeight * bgScale;
@@ -267,16 +300,10 @@ export default function Home() {
     const scale = cover
       ? (targetRatio > sourceRatio ? size.width / image.naturalWidth : size.height / image.naturalHeight)
       : (targetRatio > sourceRatio ? size.height / image.naturalHeight : size.width / image.naturalWidth);
-    const drawWidth = image.naturalWidth * scale;
-    const drawHeight = image.naturalHeight * scale;
-    let drawX = (size.width - drawWidth) / 2;
-    let drawY = (size.height - drawHeight) / 2;
-    if (cover && protectedRegion) {
-      const focusX = (protectedRegion.x + protectedRegion.width / 2) * image.naturalWidth * scale;
-      const focusY = (protectedRegion.y + protectedRegion.height / 2) * image.naturalHeight * scale;
-      drawX = Math.max(size.width - drawWidth, Math.min(0, size.width / 2 - focusX));
-      drawY = Math.max(size.height - drawHeight, Math.min(0, size.height / 2 - focusY));
-    }
+    const drawWidth = protectedPlacement?.width ?? image.naturalWidth * scale;
+    const drawHeight = protectedPlacement?.height ?? image.naturalHeight * scale;
+    const drawX = protectedPlacement?.x ?? (size.width - drawWidth) / 2;
+    const drawY = protectedPlacement?.y ?? (size.height - drawHeight) / 2;
     ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
 
     const link = document.createElement("a");
@@ -411,17 +438,23 @@ export default function Home() {
             {selectedSizes.map((size) => {
               const strategy = strategyFor(size);
               const requestOpen = openRequests.includes(size.id);
-              const objectPosition = protectedRegion ? `${(protectedRegion.x + protectedRegion.width / 2) * 100}% ${(protectedRegion.y + protectedRegion.height / 2) * 100}%` : "50% 50%";
+              const protectedPlacement = strategy === "crop" ? protectedCropPlacement(size.width, size.height) : null;
+              const placementStyle = protectedPlacement ? {
+                left: `${protectedPlacement.x / size.width * 100}%`,
+                top: `${protectedPlacement.y / size.height * 100}%`,
+                width: `${protectedPlacement.width / size.width * 100}%`,
+                height: `${protectedPlacement.height / size.height * 100}%`,
+              } : undefined;
               return (
                 <article className="result-card" key={size.id}>
                   <div className={`result-preview strategy-${strategy}`} style={{ aspectRatio: `${size.width} / ${size.height}` }}>
-                    {strategy === "extend" && <img className="blur-layer" src={imageUrl} alt="" />}
-                    <img className="main-layer" src={imageUrl} alt={`${size.name} 미리보기`} style={{ objectPosition }} />
+                    {(strategy === "extend" || protectedPlacement?.needsBackdrop) && <img className="blur-layer" src={imageUrl} alt="" />}
+                    <img className={`main-layer ${protectedPlacement ? "protected-placement" : ""}`} src={imageUrl} alt={`${size.name} 미리보기`} style={placementStyle} />
                     {size.id === "naver-mobile" && <span className="safe-zone">안전 영역</span>}
-                    {protectedRegion && <span className="focus-indicator">⌗ 보호영역 적용</span>}
+                    {protectedRegion && <span className="focus-indicator">⌗ 보호영역 전체 보존</span>}
                   </div>
                   <div className="result-body">
-                    <div className="result-title"><div><strong>{size.name}</strong><span>{size.width} × {size.height} · {CHANNEL_LABEL[size.channel]}</span></div><span className={`strategy-badge ${strategy}`}>{strategy === "preserve" ? "원본 유지" : strategy === "extend" ? "배경 확장" : "스마트 크롭"}</span></div>
+                    <div className="result-title"><div><strong>{size.name}</strong><span>{size.width} × {size.height} · {CHANNEL_LABEL[size.channel]}</span></div><span className={`strategy-badge ${strategy}`}>{strategy === "preserve" ? "원본 유지" : strategy === "extend" ? "배경 확장" : protectedPlacement?.needsBackdrop ? "보호영역 맞춤" : protectedPlacement ? "보호 크롭" : "스마트 크롭"}</span></div>
                     <div className="strategy-control" aria-label={`${size.name} 맞춤 방식`}>
                       <button className={strategy === "preserve" ? "active" : ""} onClick={() => setStrategy(size.id, "preserve")}>원본 맞춤</button>
                       <button className={strategy === "extend" ? "active" : ""} onClick={() => setStrategy(size.id, "extend")}>배경 확장</button>
