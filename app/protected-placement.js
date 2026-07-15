@@ -9,14 +9,6 @@ function normalizedRegion(region) {
   return { left, top, right, bottom };
 }
 
-function backgroundRect(targetWidth, targetHeight, imageWidth, imageHeight) {
-  const bleed = Math.max(targetWidth, targetHeight) * .08;
-  const scale = Math.max((targetWidth + bleed * 2) / imageWidth, (targetHeight + bleed * 2) / imageHeight);
-  const width = imageWidth * scale;
-  const height = imageHeight * scale;
-  return { x: (targetWidth - width) / 2, y: (targetHeight - height) / 2, width, height, bleed };
-}
-
 function boundsFor(region, foreground, imageWidth, imageHeight) {
   if (!region) return null;
   const scale = foreground.width / imageWidth;
@@ -64,7 +56,7 @@ function fitPlan({ mode, region, targetWidth, targetHeight, imageWidth, imageHei
   return {
     mode,
     foreground,
-    background: mode === "extend" ? backgroundRect(targetWidth, targetHeight, imageWidth, imageHeight) : null,
+    background: mode === "extend" ? { type: "mirror" } : null,
     protectedBounds: boundsFor(region, foreground, imageWidth, imageHeight),
     fallback: null,
     canFullyProtect: true,

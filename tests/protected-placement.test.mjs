@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { computePlacement } from "../app/protected-placement.js";
+import { computeEdgeExtensionTiles, renderPlanToContext } from "../app/canvas-renderer.js";
 
 const close = (actual, expected, tolerance = 1e-7) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} ≠ ${expected}`);
 
@@ -21,16 +22,50 @@ test("original fit keeps the whole source and fixes the protected center", () =>
   close((plan.protectedBounds.top + plan.protectedBounds.bottom) / 2, 675);
 });
 
-test("background extend visibly insets the full foreground and overscans the blur", () => {
+test("background extend visibly insets the full foreground and requests edge mirroring", () => {
   const plan = computePlacement({ mode: "extend", region: null, targetWidth: 1200, targetHeight: 628, imageWidth: 900, imageHeight: 1600 });
   assert.ok(plan.foreground.x >= 1200 * .06 - 1e-7);
   assert.ok(plan.foreground.y >= 628 * .06 - 1e-7);
   assert.ok(plan.foreground.x + plan.foreground.width <= 1200 * .94 + 1e-7);
   assert.ok(plan.foreground.y + plan.foreground.height <= 628 * .94 + 1e-7);
-  assert.ok(plan.background.x < 0);
-  assert.ok(plan.background.y < 0);
-  assert.ok(plan.background.x + plan.background.width > 1200);
-  assert.ok(plan.background.y + plan.background.height > 628);
+  assert.equal(plan.background.type, "mirror");
+});
+
+test("mirrored edge bands cover the full target without repeating the source center", () => {
+  const foreground = { x: 260, y: 60, width: 440, height: 508 };
+  const tiles = computeEdgeExtensionTiles(foreground, 1200, 628, 900, 1600);
+  const covers = (x, y) => tiles.some((tile) => x >= tile.x && x <= tile.x + tile.width && y >= tile.y && y <= tile.y + tile.height);
+  assert.ok(covers(0, 0));
+  assert.ok(covers(1200, 0));
+  assert.ok(covers(0, 628));
+  assert.ok(covers(1200, 628));
+  assert.ok(tiles.every((tile) => tile.sourceX === 0 || tile.sourceY === 0 || tile.sourceX + tile.sourceWidth === 900 || tile.sourceY + tile.sourceHeight === 1600));
+  assert.ok(tiles.every((tile) => !(tile.sourceX > 0 && tile.sourceX + tile.sourceWidth < 900 && tile.sourceY > 0 && tile.sourceY + tile.sourceHeight < 1600)));
+  const right = tiles.filter((tile) => tile.kind === "right").sort((a, b) => a.x - b.x);
+  assert.equal(right[0].flipX, true);
+  assert.equal(right[1].flipX, false);
+  close(right[0].x + right[0].width, right[1].x);
+});
+
+test("edge extension never blurs and draws the untouched foreground last", () => {
+  const draws = [];
+  const ctx = {
+    filter: "blur(9px)",
+    globalAlpha: .5,
+    globalCompositeOperation: "multiply",
+    fillStyle: "",
+    imageSmoothingEnabled: false,
+    imageSmoothingQuality: "low",
+    save() {}, restore() {}, clearRect() {}, fillRect() {}, beginPath() {}, rect() {}, clip() {}, translate() {}, scale() {},
+    drawImage(...args) { draws.push({ args, filter: this.filter, alpha: this.globalAlpha, composite: this.globalCompositeOperation }); },
+  };
+  const image = { width: 900, height: 1600 };
+  const foreground = { x: 260, y: 60, width: 440, height: 508 };
+  renderPlanToContext(ctx, image, 1200, 628, { foreground, background: { type: "mirror" } });
+  assert.ok(draws.length > 1);
+  assert.ok(draws.every((draw) => draw.filter === "none" && draw.alpha === 1 && draw.composite === "source-over"));
+  assert.ok(draws.slice(0, -1).every((draw) => draw.args.length === 9));
+  assert.deepEqual(draws.at(-1).args, [image, foreground.x, foreground.y, foreground.width, foreground.height]);
 });
 
 test("crop remains a real cover crop and centers the protected region", () => {

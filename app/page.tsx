@@ -2,6 +2,7 @@
 
 import { ChangeEvent, DragEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { computePlacement } from "./protected-placement.js";
+import { renderPlanToContext } from "./canvas-renderer.js";
 
 type Channel = "meta" | "google" | "kakao" | "naver" | "brand" | "custom";
 type Strategy = "preserve" | "extend" | "crop";
@@ -76,6 +77,44 @@ const CHANNEL_LABEL: Record<Channel, string> = {
 
 const REQUEST_CHIPS = ["인물 얼굴을 꼭 살려주세요", "제품을 중앙에 유지해주세요", "이미지 속 문구를 자르지 마세요", "로고 주변 여백을 지켜주세요"];
 
+const previewImageCache = new Map<string, Promise<HTMLImageElement>>();
+
+function loadPreviewImage(source: string) {
+  const cached = previewImageCache.get(source);
+  if (cached) return cached;
+  const pending = new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("이미지를 불러오지 못했습니다."));
+    image.src = source;
+  });
+  previewImageCache.set(source, pending);
+  return pending;
+}
+
+function ResultCanvas({ imageUrl, size, plan }: { imageUrl: string; size: AdSize; plan: ReturnType<typeof computePlacement> }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const planSignature = JSON.stringify(plan);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadPreviewImage(imageUrl).then((image) => {
+      if (cancelled || !canvasRef.current) return;
+      const canvas = canvasRef.current;
+      const previewScale = Math.min(1, 720 / Math.max(size.width, size.height));
+      canvas.width = Math.max(1, Math.round(size.width * previewScale));
+      canvas.height = Math.max(1, Math.round(size.height * previewScale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(canvas.width / size.width, 0, 0, canvas.height / size.height, 0, 0);
+      renderPlanToContext(ctx, image, size.width, size.height, plan);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [imageUrl, size.width, size.height, planSignature]);
+
+  return <canvas ref={canvasRef} aria-label={`${size.name} 변환 미리보기`} />;
+}
+
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
@@ -131,7 +170,10 @@ export default function Home() {
 
   function acceptFile(nextFile?: File) {
     if (!nextFile || !nextFile.type.startsWith("image/")) return;
-    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    if (imageUrl) {
+      previewImageCache.delete(imageUrl);
+      URL.revokeObjectURL(imageUrl);
+    }
     const url = URL.createObjectURL(nextFile);
     setFile(nextFile);
     setImageUrl(url);
@@ -280,20 +322,16 @@ export default function Home() {
     const plan = placementFor(size, strategy, image.naturalWidth, image.naturalHeight);
     if (!plan) return;
 
-    ctx.fillStyle = "#eceef2";
-    ctx.fillRect(0, 0, size.width, size.height);
-    if (plan.background) {
-      ctx.save();
-      ctx.filter = `blur(${Math.max(size.width, size.height) * 0.025}px) brightness(.72)`;
-      ctx.drawImage(image, plan.background.x, plan.background.y, plan.background.width, plan.background.height);
-      ctx.restore();
-    }
-    ctx.drawImage(image, plan.foreground.x, plan.foreground.y, plan.foreground.width, plan.foreground.height);
+    renderPlanToContext(ctx, image, size.width, size.height, plan);
 
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) return;
+    const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.download = `${file?.name.replace(/\.[^.]+$/, "") || "creative"}_${size.width}x${size.height}.png`;
-    link.href = canvas.toDataURL("image/png");
+    link.href = downloadUrl;
     link.click();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
   }
 
   return (
@@ -424,37 +462,24 @@ export default function Home() {
               const requestOpen = openRequests.includes(size.id);
               const plan = placementFor(size, strategy);
               if (!plan) return null;
-              const placementStyle = {
-                left: `${plan.foreground.x / size.width * 100}%`,
-                top: `${plan.foreground.y / size.height * 100}%`,
-                width: `${plan.foreground.width / size.width * 100}%`,
-                height: `${plan.foreground.height / size.height * 100}%`,
-              };
-              const backgroundStyle = plan.background ? {
-                left: `${plan.background.x / size.width * 100}%`,
-                top: `${plan.background.y / size.height * 100}%`,
-                width: `${plan.background.width / size.width * 100}%`,
-                height: `${plan.background.height / size.height * 100}%`,
-              } : undefined;
               const cropOffset = cropYOffsets[size.id] || 0;
               const canMoveVertically = strategy === "crop" && !plan.fallback && plan.verticalTravel.total > .5;
               const positionLabel = cropOffset === 0 ? "가운데" : cropOffset < 0 ? `위 ${Math.abs(cropOffset)}%` : `아래 ${cropOffset}%`;
               return (
                 <article className="result-card" key={size.id}>
                   <div className={`result-preview strategy-${strategy}`} style={{ aspectRatio: `${size.width} / ${size.height}` }}>
-                    {plan.background && <img className="blur-layer" src={imageUrl} alt="" style={backgroundStyle} />}
-                    <img className="main-layer placed-layer" src={imageUrl} alt={`${size.name} 미리보기`} style={placementStyle} />
+                    <ResultCanvas imageUrl={imageUrl} size={size} plan={plan} />
                     {size.id === "naver-mobile" && <span className="safe-zone">안전 영역</span>}
                     {protectedRegion && <span className="focus-indicator">⌗ {plan.fallback ? "보호영역 우선 · 배경확장" : strategy === "crop" ? "보호영역 중앙" : "보호영역 고정"}</span>}
                   </div>
                   <div className="result-body">
-                    <div className="result-title"><div><strong>{size.name}</strong><span>{size.width} × {size.height} · {CHANNEL_LABEL[size.channel]}</span></div><span className={`strategy-badge ${plan.fallback ? "extend" : strategy}`}>{plan.fallback ? "보호 우선 확장" : strategy === "preserve" ? protectedRegion ? "보호영역 맞춤" : "원본 맞춤" : strategy === "extend" ? "블러 배경 확장" : protectedRegion ? "보호영역 크롭" : "가운데 크롭"}</span></div>
+                    <div className="result-title"><div><strong>{size.name}</strong><span>{size.width} × {size.height} · {CHANNEL_LABEL[size.channel]}</span></div><span className={`strategy-badge ${plan.fallback ? "extend" : strategy}`}>{plan.fallback ? "보호 우선 확장" : strategy === "preserve" ? protectedRegion ? "보호영역 맞춤" : "원본 맞춤" : strategy === "extend" ? "원본 가장자리 확장" : protectedRegion ? "보호영역 크롭" : "가운데 크롭"}</span></div>
                     <div className="strategy-control" aria-label={`${size.name} 맞춤 방식`}>
                       <button className={strategy === "preserve" ? "active" : ""} onClick={() => setStrategy(size.id, "preserve")}>원본 맞춤</button>
                       <button className={strategy === "extend" ? "active" : ""} onClick={() => setStrategy(size.id, "extend")}>배경 확장</button>
                       <button className={strategy === "crop" ? "active" : ""} onClick={() => setStrategy(size.id, "crop")}>크롭</button>
                     </div>
-                    <p className="mode-description">{strategy === "preserve" ? "원본 전체를 담고 보호영역을 가운데에 고정해요." : strategy === "extend" ? "원본 전체를 담고 빈 공간을 흐린 배경으로 확장해요." : plan.fallback ? "보호영역이 지면보다 커서 자르지 않고 배경을 확장했어요." : "보호영역을 가운데에 두고 지면을 가득 채워요."}</p>
+                    <p className="mode-description">{strategy === "preserve" ? "원본 전체를 담고 보호영역을 가운데에 고정해요." : strategy === "extend" ? "원본 전체를 유지하고 가장자리 장면을 반사해 빈 공간까지 이어 붙여요." : plan.fallback ? "보호영역이 지면보다 커서 자르지 않고 원본 가장자리를 확장했어요." : "보호영역을 가운데에 두고 지면을 가득 채워요."}</p>
                     {strategy === "crop" && (
                       <div className={`crop-position-control ${canMoveVertically ? "" : "disabled"}`}>
                         <div><label htmlFor={`crop-y-${size.id}`}>제품 상하 위치 <strong>{positionLabel}</strong></label><button disabled={cropOffset === 0} onClick={() => setCropYOffsets((current) => ({ ...current, [size.id]: 0 }))}>가운데로</button></div>
