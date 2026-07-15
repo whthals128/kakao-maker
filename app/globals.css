@@ -57,8 +57,8 @@ button { cursor: pointer; }
 .upload-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: var(--violet-soft); color: var(--violet); font-size: 25px; margin-bottom: 6px; }
 .source-preview { margin-top: 22px; border-radius: 17px; background: #e9eaf0; overflow: hidden; position: relative; }
 .source-canvas { width: 100%; height: 260px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.image-stage { position: relative; display: inline-block; max-width: 100%; max-height: 260px; line-height: 0; }
-.image-stage > img { display: block; width: auto; height: auto; max-width: 100%; max-height: 260px; }
+.image-stage { position: relative; max-width: 100%; max-height: 260px; line-height: 0; }
+.image-stage > img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .selection-layer { position: absolute; inset: 0; z-index: 5; touch-action: none; }
 .selecting-region .selection-layer { cursor: crosshair; background: rgba(19,20,25,.2); }
 .selection-layer em { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); padding: 9px 12px; border-radius: 8px; background: rgba(18,19,24,.82); color: white; font-size: 11px; line-height: 1; white-space: nowrap; font-style: normal; }
@@ -69,6 +69,7 @@ button { cursor: pointer; }
 .source-info strong { font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .source-info span { color: var(--muted); font-size: 11px; }
 .source-info button { border: 0; background: var(--soft); border-radius: 7px; padding: 7px 9px; font-size: 11px; font-weight: 700; }
+.source-info button:disabled { opacity: .45; cursor: not-allowed; }
 .source-buttons { display: flex; flex-direction: row !important; gap: 6px !important; flex: 0 0 auto; }
 .source-buttons .region-active { background: #e9ffd0; color: #476319; }
 .original-badge { position: absolute; top: 10px; left: 10px; padding: 5px 8px; background: rgba(20,22,27,.78); color: white; border-radius: 6px; font-size: 10px; font-weight: 700; }
