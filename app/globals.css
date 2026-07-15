@@ -65,9 +65,14 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .upload-box:hover, .upload-box:focus { outline: none; border-color: var(--naver); background: #f5fff9; }
 .upload-box img { width: 46px; height: 46px; object-fit: contain; border-radius: 8px; background: white; }
 .upload-plus { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; background: #ece9e3; color: #777; font-size: 22px; }
-.upload-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.upload-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .upload-copy b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .upload-copy span { color: var(--muted); font-size: 9px; }
+.paste-button { width: 100%; min-height: 32px; margin-top: 7px; padding: 6px 10px; display: flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid #ded8cf; border-radius: 9px; background: white; color: #5f5a52; font-size: 9px; font-weight: 700; }
+.paste-button:hover, .paste-button:focus-visible { border-color: var(--naver); outline: none; background: #f4fff8; color: var(--naver-dark); }
+.paste-button > span { margin-right: 4px; }
+.paste-button kbd { min-width: 22px; padding: 3px 4px; border: 1px solid #d7d1c8; border-bottom-width: 2px; border-radius: 4px; background: #f5f3ef; color: #514c45; font: 700 8px/1 Manrope, sans-serif; }
+.paste-button b { color: #aaa39a; font-size: 8px; }
 
 .input-label { margin-top: 8px; display: grid; grid-template-columns: 40px 1fr; align-items: center; border: 1px solid #ddd8d0; border-radius: 10px; overflow: hidden; }
 .input-label > span { align-self: stretch; display: grid; place-items: center; background: #f2f0eb; color: #777; font-size: 9px; font-weight: 700; }

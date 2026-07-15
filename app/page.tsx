@@ -2,6 +2,7 @@
 
 import {
   ChangeEvent,
+  ClipboardEvent as ReactClipboardEvent,
   DragEvent,
   useCallback,
   useEffect,
@@ -200,18 +201,29 @@ function UploadField({
   label,
   hint,
   onFile,
+  onClipboard,
 }: {
   asset: AssetState;
   assetKey: AssetKey;
   label: string;
   hint: string;
   onFile: (key: AssetKey, file?: File) => void;
+  onClipboard: (key: AssetKey) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   function drop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     onFile(assetKey, event.dataTransfer.files[0]);
+  }
+
+  function paste(event: ReactClipboardEvent<HTMLDivElement>) {
+    const pastedFile = Array.from(event.clipboardData.items)
+      .find((item) => item.type.startsWith("image/"))
+      ?.getAsFile();
+    if (!pastedFile) return;
+    event.preventDefault();
+    onFile(assetKey, pastedFile);
   }
 
   return (
@@ -234,6 +246,7 @@ function UploadField({
         className={`upload-box ${asset.file ? "has-file" : ""}`}
         onDragOver={(event) => event.preventDefault()}
         onDrop={drop}
+        onPaste={paste}
         onClick={() => inputRef.current?.click()}
         onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && inputRef.current?.click()}
         role="button"
@@ -246,7 +259,7 @@ function UploadField({
             <img src={asset.url} alt={`${label} 미리보기`} />
             <div className="upload-copy">
               <b>{asset.file?.name}</b>
-              <span>클릭하여 교체</span>
+              <span>클릭하여 교체 · Ctrl+V 가능</span>
             </div>
           </>
         ) : (
@@ -254,11 +267,15 @@ function UploadField({
             <span className="upload-plus">+</span>
             <div className="upload-copy">
               <b>이미지 선택</b>
-              <span>PNG 투명 배경 권장</span>
+              <span>PNG 투명 배경 권장 · Ctrl+V 가능</span>
             </div>
           </>
         )}
       </div>
+      <button className="paste-button" type="button" onClick={() => onClipboard(assetKey)}>
+        <span>클립보드 이미지 붙여넣기</span>
+        <kbd>Ctrl</kbd><b>+</b><kbd>V</kbd>
+      </button>
     </div>
   );
 }
@@ -424,6 +441,30 @@ export default function Home() {
     });
   }
 
+  async function pasteAsset(key: AssetKey) {
+    if (!navigator.clipboard?.read) {
+      setNotice("이 브라우저는 붙여넣기 버튼을 지원하지 않습니다. 이미지 영역을 선택한 뒤 Ctrl+V를 눌러주세요.");
+      return;
+    }
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((type) => type.startsWith("image/"));
+        if (!imageType) continue;
+        const blob = await item.getType(imageType);
+        const extension = imageType === "image/jpeg" ? "jpg" : imageType.split("/")[1] || "png";
+        const name = key === "logo" ? `붙여넣은_브랜드로고.${extension}` : `붙여넣은_상품이미지.${extension}`;
+        setAsset(key, new File([blob], name, { type: imageType }));
+        setNotice(`${key === "logo" ? "브랜드 로고" : "상품 이미지"}를 클립보드에서 붙여넣었습니다.`);
+        return;
+      }
+      setNotice("클립보드에서 이미지가 발견되지 않았습니다. 이미지를 복사한 뒤 다시 시도해주세요.");
+    } catch {
+      setNotice("클립보드 접근이 허용되지 않았습니다. 이미지 영역을 선택한 뒤 Ctrl+V를 눌러주세요.");
+    }
+  }
+
   function reset() {
     if (logo.url) URL.revokeObjectURL(logo.url);
     if (product.url) URL.revokeObjectURL(product.url);
@@ -518,8 +559,8 @@ export default function Home() {
             </div>
           </div>
 
-          <UploadField asset={logo} assetKey="logo" label="브랜드 로고" hint="상단 편집 영역 안에서 확대" onFile={setAsset} />
-          <UploadField asset={product} assetKey="product" label="상품 이미지" hint="중앙 영역에서 확대·위치 조절" onFile={setAsset} />
+          <UploadField asset={logo} assetKey="logo" label="브랜드 로고" hint="상단 편집 영역 안에서 확대" onFile={setAsset} onClipboard={pasteAsset} />
+          <UploadField asset={product} assetKey="product" label="상품 이미지" hint="중앙 영역에서 확대·위치 조절" onFile={setAsset} onClipboard={pasteAsset} />
 
           <div className="field-block">
             <div className="field-heading"><div><strong>광고 문구</strong><span>{TEXT_FONT} 고정 · 행간 {TEXT_GAP}px</span></div></div>
