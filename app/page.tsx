@@ -14,6 +14,12 @@ const HEIGHT = 464;
 const MAX_BYTES = 400 * 1024;
 const LOGO_BOX = { x: 24, y: 40, width: 252, height: 28 };
 const PRODUCT_BOX = { x: 24, y: 92, width: 252, height: 229 };
+const TEXT_BOX = { x: 24, y: 345, width: 252, height: 80 };
+const TEXT_FONT = "AppleSDGothicNeoEB00";
+const TEXT_GAP = 17;
+const SETTINGS_KEY = "focus-maker:last-settings:v1";
+const ASSET_DB_NAME = "focus-maker-assets";
+const ASSET_STORE_NAME = "last-assets";
 
 type AssetKey = "logo" | "product";
 type AssetState = {
@@ -22,7 +28,89 @@ type AssetState = {
   url: string;
 };
 
+type StoredAsset = {
+  blob: Blob;
+  name: string;
+  type: string;
+};
+
+type DraftSettings = {
+  line1: string;
+  line2: string;
+  background: string;
+  line1Color: string;
+  line2Color: string;
+  line1Size: number;
+  line2Size: number;
+  logoScale: number;
+  productScale: number;
+  productOffsetY: number;
+  showGuides: boolean;
+};
+
 const EMPTY_ASSET: AssetState = { file: null, image: null, url: "" };
+
+function prepareAsset(file: File) {
+  return new Promise<AssetState>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => resolve({ file, image, url });
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("invalid-image"));
+    };
+    image.src = url;
+  });
+}
+
+function openAssetDatabase() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(ASSET_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(ASSET_STORE_NAME)) {
+        request.result.createObjectStore(ASSET_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveStoredAsset(key: AssetKey, file: File) {
+  const database = await openAssetDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(ASSET_STORE_NAME, "readwrite");
+    transaction.objectStore(ASSET_STORE_NAME).put(
+      { blob: file, name: file.name, type: file.type } satisfies StoredAsset,
+      key,
+    );
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function readStoredAsset(key: AssetKey) {
+  const database = await openAssetDatabase();
+  const result = await new Promise<StoredAsset | undefined>((resolve, reject) => {
+    const request = database.transaction(ASSET_STORE_NAME, "readonly").objectStore(ASSET_STORE_NAME).get(key);
+    request.onsuccess = () => resolve(request.result as StoredAsset | undefined);
+    request.onerror = () => reject(request.error);
+  });
+  database.close();
+  return result;
+}
+
+async function clearStoredAssets() {
+  const database = await openAssetDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(ASSET_STORE_NAME, "readwrite");
+    transaction.objectStore(ASSET_STORE_NAME).clear();
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
 
 function normalizeHex(value: string, fallback: string) {
   const trimmed = value.trim();
@@ -56,24 +144,49 @@ function fitImage(
   ctx.restore();
 }
 
-function drawFittedText(
+function fittedTextSize(
   ctx: CanvasRenderingContext2D,
   text: string,
-  y: number,
-  color: string,
   requestedSize: number,
 ) {
-  const maxWidth = 252;
   let size = requestedSize;
-  ctx.font = `800 ${size}px "Arial", "Noto Sans KR", sans-serif`;
-  while (size > 13 && ctx.measureText(text).width > maxWidth) {
+  ctx.font = `800 ${size}px "${TEXT_FONT}", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
+  while (size > 12 && ctx.measureText(text).width > TEXT_BOX.width) {
     size -= 1;
-    ctx.font = `800 ${size}px "Arial", "Noto Sans KR", sans-serif`;
+    ctx.font = `800 ${size}px "${TEXT_FONT}", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
   }
-  ctx.fillStyle = color;
+  return size;
+}
+
+function drawTextBlock(
+  ctx: CanvasRenderingContext2D,
+  first: { text: string; color: string; size: number },
+  second: { text: string; color: string; size: number },
+) {
+  const firstSize = fittedTextSize(ctx, first.text, first.size);
+  const firstMetrics = ctx.measureText(first.text);
+  const firstAscent = firstMetrics.actualBoundingBoxAscent || firstSize * .8;
+  const firstDescent = firstMetrics.actualBoundingBoxDescent || firstSize * .2;
+
+  const secondSize = fittedTextSize(ctx, second.text, second.size);
+  const secondMetrics = ctx.measureText(second.text);
+  const secondAscent = secondMetrics.actualBoundingBoxAscent || secondSize * .8;
+  const secondDescent = secondMetrics.actualBoundingBoxDescent || secondSize * .2;
+
+  const contentHeight = firstAscent + firstDescent + TEXT_GAP + secondAscent + secondDescent;
+  const firstBaseline = TEXT_BOX.y + (TEXT_BOX.height - contentHeight) / 2 + firstAscent;
+  const secondBaseline = firstBaseline + firstDescent + TEXT_GAP + secondAscent;
+
   ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, WIDTH / 2, y, maxWidth);
+  ctx.textBaseline = "alphabetic";
+
+  ctx.font = `800 ${firstSize}px "${TEXT_FONT}", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
+  ctx.fillStyle = first.color;
+  ctx.fillText(first.text, WIDTH / 2, firstBaseline, TEXT_BOX.width);
+
+  ctx.font = `800 ${secondSize}px "${TEXT_FONT}", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
+  ctx.fillStyle = second.color;
+  ctx.fillText(second.text, WIDTH / 2, secondBaseline, TEXT_BOX.width);
 }
 
 function formatBytes(bytes: number | null) {
@@ -167,6 +280,8 @@ export default function Home() {
   const [showGuides, setShowGuides] = useState(true);
   const [pngBytes, setPngBytes] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
+  const [draftReady, setDraftReady] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("마지막 작업 확인 중");
 
   const bg = normalizeHex(background, "#F7E6D8");
   const text1 = normalizeHex(line1Color, "#171717");
@@ -191,8 +306,11 @@ export default function Home() {
       fitImage(ctx, product.image, PRODUCT_BOX, productScale, productOffsetY);
     }
 
-    drawFittedText(ctx, line1.trim() || " ", 361.5, text1, line1Size);
-    drawFittedText(ctx, line2.trim() || " ", 408.5, text2, line2Size);
+    drawTextBlock(
+      ctx,
+      { text: line1.trim() || " ", color: text1, size: line1Size },
+      { text: line2.trim() || " ", color: text2, size: line2Size },
+    );
   }, [bg, line1, line1Size, line2, line2Size, logo.image, logoScale, product.image, productOffsetY, productScale, text1, text2]);
 
   useEffect(() => {
@@ -205,23 +323,105 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [draw]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreDraft() {
+      try {
+        const rawSettings = window.localStorage.getItem(SETTINGS_KEY);
+        if (rawSettings) {
+          const saved = JSON.parse(rawSettings) as Partial<DraftSettings>;
+          if (typeof saved.line1 === "string") setLine1(saved.line1);
+          if (typeof saved.line2 === "string") setLine2(saved.line2);
+          if (typeof saved.background === "string") setBackground(saved.background);
+          if (typeof saved.line1Color === "string") setLine1Color(saved.line1Color);
+          if (typeof saved.line2Color === "string") setLine2Color(saved.line2Color);
+          if (typeof saved.line1Size === "number") setLine1Size(saved.line1Size);
+          if (typeof saved.line2Size === "number") setLine2Size(saved.line2Size);
+          if (typeof saved.logoScale === "number") setLogoScale(saved.logoScale);
+          if (typeof saved.productScale === "number") setProductScale(saved.productScale);
+          if (typeof saved.productOffsetY === "number") setProductOffsetY(saved.productOffsetY);
+          if (typeof saved.showGuides === "boolean") setShowGuides(saved.showGuides);
+        }
+
+        const [storedLogo, storedProduct] = await Promise.all([
+          readStoredAsset("logo"),
+          readStoredAsset("product"),
+        ]);
+        const [restoredLogo, restoredProduct] = await Promise.all([
+          storedLogo
+            ? prepareAsset(new File([storedLogo.blob], storedLogo.name, { type: storedLogo.type }))
+            : null,
+          storedProduct
+            ? prepareAsset(new File([storedProduct.blob], storedProduct.name, { type: storedProduct.type }))
+            : null,
+        ]);
+
+        if (cancelled) {
+          if (restoredLogo?.url) URL.revokeObjectURL(restoredLogo.url);
+          if (restoredProduct?.url) URL.revokeObjectURL(restoredProduct.url);
+          return;
+        }
+        if (restoredLogo) setLogo(restoredLogo);
+        if (restoredProduct) setProduct(restoredProduct);
+        setSaveStatus(rawSettings || storedLogo || storedProduct ? "마지막 작업 복원됨" : "자동 저장 켜짐");
+      } catch {
+        setSaveStatus("자동 저장 준비됨");
+      } finally {
+        if (!cancelled) setDraftReady(true);
+      }
+    }
+
+    void restoreDraft();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    const timer = window.setTimeout(() => {
+      const settings: DraftSettings = {
+        line1,
+        line2,
+        background,
+        line1Color,
+        line2Color,
+        line1Size,
+        line2Size,
+        logoScale,
+        productScale,
+        productOffsetY,
+        showGuides,
+      };
+      try {
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        setSaveStatus("자동 저장됨");
+      } catch {
+        setSaveStatus("설정 저장 실패");
+      }
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [background, draftReady, line1, line1Color, line1Size, line2, line2Color, line2Size, logoScale, productOffsetY, productScale, showGuides]);
+
   function setAsset(key: AssetKey, file?: File) {
     if (!file || !file.type.startsWith("image/")) return;
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = () => {
+    setSaveStatus("이미지 저장 중");
+    void prepareAsset(file).then(async (nextAsset) => {
       const setter = key === "logo" ? setLogo : setProduct;
       setter((current) => {
         if (current.url) URL.revokeObjectURL(current.url);
-        return { file, image, url };
+        return nextAsset;
       });
       setNotice("");
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
+      try {
+        await saveStoredAsset(key, file);
+        setSaveStatus("자동 저장됨");
+      } catch {
+        setSaveStatus("이미지 저장 실패");
+      }
+    }).catch(() => {
       setNotice("이미지를 읽을 수 없습니다. PNG 또는 JPG 파일을 사용해주세요.");
-    };
-    image.src = url;
+      setSaveStatus("이미지 저장 실패");
+    });
   }
 
   function reset() {
@@ -237,7 +437,12 @@ export default function Home() {
     setLogoScale(100);
     setProductScale(100);
     setProductOffsetY(0);
+    setLine1Size(23);
+    setLine2Size(23);
+    setShowGuides(true);
     setNotice("");
+    window.localStorage.removeItem(SETTINGS_KEY);
+    void clearStoredAssets().then(() => setSaveStatus("초기화됨")).catch(() => setSaveStatus("초기화 저장 실패"));
   }
 
   async function makeJpegBlob() {
@@ -307,14 +512,17 @@ export default function Home() {
         <aside className="control-panel">
           <div className="panel-title">
             <div><span>01</span><h2>소재 입력</h2></div>
-            <button className="text-button" type="button" onClick={reset}>초기화</button>
+            <div className="panel-actions">
+              <span className="save-indicator">{saveStatus}</span>
+              <button className="text-button" type="button" onClick={reset}>초기화</button>
+            </div>
           </div>
 
           <UploadField asset={logo} assetKey="logo" label="브랜드 로고" hint="상단 편집 영역 안에서 확대" onFile={setAsset} />
           <UploadField asset={product} assetKey="product" label="상품 이미지" hint="중앙 영역에서 확대·위치 조절" onFile={setAsset} />
 
           <div className="field-block">
-            <div className="field-heading"><div><strong>광고 문구</strong><span>긴 문구는 영역에 맞춰 자동 축소</span></div></div>
+            <div className="field-heading"><div><strong>광고 문구</strong><span>{TEXT_FONT} 고정 · 행간 {TEXT_GAP}px</span></div></div>
             <label className="input-label">
               <span>1행</span>
               <input value={line1} maxLength={20} onChange={(event) => setLine1(event.target.value)} placeholder="브랜드명" />
@@ -340,8 +548,8 @@ export default function Home() {
             <RangeField label="로고 확대" value={logoScale} min={50} max={500} onChange={setLogoScale} />
             <RangeField label="상품 확대" value={productScale} min={50} max={400} onChange={setProductScale} />
             <RangeField label="상품 위·아래" value={productOffsetY} min={-110} max={110} suffix="px" onChange={setProductOffsetY} />
-            <RangeField label="1행 글자" value={line1Size} min={16} max={26} suffix="px" onChange={setLine1Size} />
-            <RangeField label="2행 글자" value={line2Size} min={16} max={26} suffix="px" onChange={setLine2Size} />
+            <RangeField label="1행 글자" value={line1Size} min={12} max={32} suffix="px" editable onChange={setLine1Size} />
+            <RangeField label="2행 글자" value={line2Size} min={12} max={32} suffix="px" editable onChange={setLine2Size} />
           </details>
         </aside>
 
@@ -379,7 +587,7 @@ export default function Home() {
               <span className="status-dot" />
               <div><b>{withinLimit ? "가이드 용량 적합" : "PNG 용량 확인 필요"}</b><small>예상 PNG {formatBytes(pngBytes)} / 최대 400KB</small></div>
             </div>
-            <span className="privacy-note">이미지는 브라우저 안에서만 처리됩니다</span>
+            <span className="privacy-note">마지막 작업과 이미지는 이 브라우저에 자동 저장됩니다</span>
           </div>
 
           {notice && <p className="notice" role="status">{notice}</p>}
@@ -423,11 +631,32 @@ function ColorField({ label, value, fallback, onChange }: { label: string; value
   );
 }
 
-function RangeField({ label, value, min, max, suffix = "%", onChange }: { label: string; value: number; min: number; max: number; suffix?: string; onChange: (value: number) => void }) {
+function RangeField({ label, value, min, max, suffix = "%", editable = false, onChange }: { label: string; value: number; min: number; max: number; suffix?: string; editable?: boolean; onChange: (value: number) => void }) {
+  function updateValue(nextValue: number) {
+    if (!Number.isFinite(nextValue)) return;
+    onChange(Math.min(max, Math.max(min, nextValue)));
+  }
+
   return (
     <label className="range-field">
-      <span>{label}<b>{value}{suffix}</b></span>
-      <input type="range" min={min} max={max} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <span>
+        {label}
+        {editable ? (
+          <span className="range-number-wrap">
+            <input
+              className="range-number"
+              type="number"
+              min={min}
+              max={max}
+              value={value}
+              aria-label={`${label} 직접 입력`}
+              onChange={(event) => updateValue(Number(event.target.value))}
+            />
+            <b>{suffix}</b>
+          </span>
+        ) : <b>{value}{suffix}</b>}
+      </span>
+      <input type="range" min={min} max={max} value={value} onChange={(event) => updateValue(Number(event.target.value))} />
     </label>
   );
 }
