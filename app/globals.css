@@ -91,6 +91,8 @@ button { cursor: pointer; }
 .adjust-box { margin: -2px 0 18px; padding: 15px 14px; border: 1px solid #e5e0d8; border-radius: 12px; background: #faf9f6; }
 .adjust-heading { display: flex; align-items: center; justify-content: space-between; }
 .adjust-heading strong { font-size: 10px; }
+.second-layer { border-color: #d9cfa8; background: #fffdf3; }
+.layer-note { margin: 8px 0 2px; color: #8b6a11; font-size: 8px; line-height: 1.55; }
 .range-field { margin-top: 12px; display: block; }
 .range-field > span { display: flex; justify-content: space-between; color: #777; font-size: 8px; }
 .range-field b { color: var(--ink); font: 700 9px/1 Manrope, sans-serif; }
@@ -174,9 +176,10 @@ button { cursor: pointer; }
 .guide-cards li::marker { color: var(--yellow); }
 .review-note { margin: 18px 0 0; padding: 16px 18px; border-radius: 10px; background: var(--yellow); color: var(--ink); font-size: 10px; }
 .review-note b { margin-right: 9px; }
-footer { padding: 28px max(24px, calc((100vw - 1240px) / 2)); display: flex; align-items: center; justify-content: space-between; color: #817b72; font-size: 9px; }
+footer { padding: 28px max(24px, calc((100vw - 1240px) / 2)); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; color: #817b72; font-size: 9px; }
 footer span { color: var(--ink); font: 800 11px/1 Manrope, sans-serif; letter-spacing: .04em; }
 footer p { margin: 0; }
+footer a { color: var(--ink); font-weight: 700; text-underline-offset: 2px; }
 
 @media (max-width: 1040px) {
   .hero { align-items: stretch; flex-direction: column; }

@@ -18,7 +18,7 @@ const STORE_NAME = "assets";
 
 type TemplateType = "badge" | "center";
 type ObjectSide = "left" | "right";
-type AssetKey = "product" | "advertiser";
+type AssetKey = "product" | "product2" | "advertiser";
 type AssetState = { file: File | null; image: HTMLImageElement | null; url: string };
 type StoredAsset = { blob: Blob; name: string; type: string };
 type Settings = {
@@ -34,6 +34,9 @@ type Settings = {
   productScale: number;
   productX: number;
   productY: number;
+  product2Scale: number;
+  product2X: number;
+  product2Y: number;
   showGuides: boolean;
 };
 
@@ -55,6 +58,19 @@ function prepareAsset(file: File) {
     };
     image.src = url;
   });
+}
+
+function preparePublicAsset(url: string) {
+  return new Promise<AssetState>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve({ file: null, image, url });
+    image.onerror = () => reject(new Error("invalid-public-image"));
+    image.src = url;
+  });
+}
+
+function revokeAssetUrl(asset: AssetState) {
+  if (asset.url.startsWith("blob:")) URL.revokeObjectURL(asset.url);
 }
 
 function openDatabase() {
@@ -202,7 +218,7 @@ function UploadField({
     <div className="field-block">
       <div className="field-heading">
         <div><strong>{label}</strong><span>{hint}</span></div>
-        {asset.file && <span className="complete-badge">등록됨</span>}
+        {asset.image && <span className="complete-badge">등록됨</span>}
       </div>
       <input
         ref={inputRef}
@@ -226,7 +242,7 @@ function UploadField({
             {/* Blob URL from a local upload. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={asset.url} alt={`${label} 미리보기`} />
-            <div className="upload-copy"><b>{asset.file?.name}</b><span>클릭하여 교체 · Ctrl+V 가능</span></div>
+            <div className="upload-copy"><b>{asset.file?.name ?? (assetKey === "advertiser" ? "제이에스티나 기본 로고" : "등록된 이미지")}</b><span>클릭하여 교체 · Ctrl+V 가능</span></div>
           </>
         ) : (
           <>
@@ -274,10 +290,11 @@ export default function Home() {
   const [template, setTemplate] = useState<TemplateType>("badge");
   const [objectSide, setObjectSide] = useState<ObjectSide>("right");
   const [product, setProduct] = useState<AssetState>(EMPTY_ASSET);
+  const [product2, setProduct2] = useState<AssetState>(EMPTY_ASSET);
   const [advertiser, setAdvertiser] = useState<AssetState>(EMPTY_ASSET);
   const [mainCopy, setMainCopy] = useState("니니즈 쫀득쫀득 촉감의 매력");
   const [subCopy, setSubCopy] = useState("오늘만 10% 추가적립");
-  const [advertiserText, setAdvertiserText] = useState("KAKAO FRIENDS");
+  const [advertiserText, setAdvertiserText] = useState("J.ESTINA");
   const [badgeText, setBadgeText] = useState("10%");
   const [background, setBackground] = useState("#F5F5F5");
   const [textColor, setTextColor] = useState("#4C4C4C");
@@ -285,6 +302,9 @@ export default function Home() {
   const [productScale, setProductScale] = useState(100);
   const [productX, setProductX] = useState(0);
   const [productY, setProductY] = useState(0);
+  const [product2Scale, setProduct2Scale] = useState(82);
+  const [product2X, setProduct2X] = useState(62);
+  const [product2Y, setProduct2Y] = useState(18);
   const [showGuides, setShowGuides] = useState(true);
   const [notice, setNotice] = useState("");
   const [fileBytes, setFileBytes] = useState<number | null>(null);
@@ -314,6 +334,7 @@ export default function Home() {
       const copyWidth = 500;
 
       if (product.image) drawContainedImage(ctx, product.image, productBox, productScale, productX, productY);
+      if (product2.image) drawContainedImage(ctx, product2.image, productBox, product2Scale, product2X, product2Y);
 
       ctx.fillStyle = copyColor;
       ctx.textAlign = copyAlign;
@@ -346,6 +367,7 @@ export default function Home() {
     } else {
       const productBox = { x: 330, y: 0, width: 273, height: 258 };
       if (product.image) drawContainedImage(ctx, product.image, productBox, productScale, productX, productY);
+      if (product2.image) drawContainedImage(ctx, product2.image, productBox, product2Scale, product2X, product2Y);
 
       ctx.fillStyle = copyColor;
       ctx.textBaseline = "middle";
@@ -359,7 +381,7 @@ export default function Home() {
       ctx.fillText(subCopy.trim() || "우측 카피", 886, 139, 270);
       drawAdvertiser(ctx, advertiser, advertiserText, 884, 42, "right");
     }
-  }, [advertiser, advertiserText, badgeText, bg, copyColor, flagColor, mainCopy, objectSide, product.image, productScale, productX, productY, subCopy, template]);
+  }, [advertiser, advertiserText, badgeText, bg, copyColor, flagColor, mainCopy, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subCopy, template]);
 
   useEffect(() => {
     draw();
@@ -388,19 +410,27 @@ export default function Home() {
           if (typeof saved.productScale === "number") setProductScale(saved.productScale);
           if (typeof saved.productX === "number") setProductX(saved.productX);
           if (typeof saved.productY === "number") setProductY(saved.productY);
+          if (typeof saved.product2Scale === "number") setProduct2Scale(saved.product2Scale);
+          if (typeof saved.product2X === "number") setProduct2X(saved.product2X);
+          if (typeof saved.product2Y === "number") setProduct2Y(saved.product2Y);
           if (typeof saved.showGuides === "boolean") setShowGuides(saved.showGuides);
         }
-        const [storedProduct, storedAdvertiser] = await Promise.all([readAsset("product"), readAsset("advertiser")]);
-        const [nextProduct, nextAdvertiser] = await Promise.all([
+        const [storedProduct, storedProduct2, storedAdvertiser] = await Promise.all([readAsset("product"), readAsset("product2"), readAsset("advertiser")]);
+        const [nextProduct, nextProduct2, nextAdvertiser] = await Promise.all([
           storedProduct ? prepareAsset(new File([storedProduct.blob], storedProduct.name, { type: storedProduct.type })) : null,
-          storedAdvertiser ? prepareAsset(new File([storedAdvertiser.blob], storedAdvertiser.name, { type: storedAdvertiser.type })) : null,
+          storedProduct2 ? prepareAsset(new File([storedProduct2.blob], storedProduct2.name, { type: storedProduct2.type })) : null,
+          storedAdvertiser
+            ? prepareAsset(new File([storedAdvertiser.blob], storedAdvertiser.name, { type: storedAdvertiser.type }))
+            : preparePublicAsset("/jestina-advertiser.png"),
         ]);
         if (cancelled) {
-          if (nextProduct?.url) URL.revokeObjectURL(nextProduct.url);
-          if (nextAdvertiser?.url) URL.revokeObjectURL(nextAdvertiser.url);
+          if (nextProduct) revokeAssetUrl(nextProduct);
+          if (nextProduct2) revokeAssetUrl(nextProduct2);
+          if (nextAdvertiser) revokeAssetUrl(nextAdvertiser);
           return;
         }
         if (nextProduct) setProduct(nextProduct);
+        if (nextProduct2) setProduct2(nextProduct2);
         if (nextAdvertiser) setAdvertiser(nextAdvertiser);
       } catch {
         setNotice("이전 작업을 불러오지 못했습니다. 새 작업은 정상적으로 진행할 수 있습니다.");
@@ -417,23 +447,24 @@ export default function Home() {
     const timer = window.setTimeout(() => {
       const settings: Settings = {
         template, objectSide, mainCopy, subCopy, advertiserText, badgeText,
-        background, textColor, badgeColor, productScale, productX, productY, showGuides,
+        background, textColor, badgeColor, productScale, productX, productY,
+        product2Scale, product2X, product2Y, showGuides,
       };
       window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [advertiserText, background, badgeColor, badgeText, draftReady, mainCopy, objectSide, productScale, productX, productY, showGuides, subCopy, template, textColor]);
+  }, [advertiserText, background, badgeColor, badgeText, draftReady, mainCopy, objectSide, product2Scale, product2X, product2Y, productScale, productX, productY, showGuides, subCopy, template, textColor]);
 
   function setAsset(key: AssetKey, file?: File) {
     if (!file || !file.type.startsWith("image/")) return;
     void prepareAsset(file).then(async (next) => {
-      const setter = key === "product" ? setProduct : setAdvertiser;
+      const setter = key === "product" ? setProduct : key === "product2" ? setProduct2 : setAdvertiser;
       setter((current) => {
-        if (current.url) URL.revokeObjectURL(current.url);
+        revokeAssetUrl(current);
         return next;
       });
       await saveAsset(key, file);
-      setNotice(`${key === "product" ? "상품 이미지" : "광고주체 이미지"}를 적용했습니다.`);
+      setNotice(`${key === "advertiser" ? "광고주체 이미지" : key === "product2" ? "상품 이미지 2" : "상품 이미지 1"}를 적용했습니다.`);
     }).catch(() => setNotice("이미지 파일을 읽지 못했습니다. PNG, JPG 또는 WEBP 파일을 사용해주세요."));
   }
 
@@ -462,6 +493,9 @@ export default function Home() {
     setProductScale(100);
     setProductX(0);
     setProductY(0);
+    setProduct2Scale(82);
+    setProduct2X(62);
+    setProduct2Y(18);
     if (next === "center") {
       setMainCopy("쫀득쫀득 촉감의");
       setSubCopy("니니즈 필로우");
@@ -472,15 +506,17 @@ export default function Home() {
   }
 
   function reset() {
-    if (product.url) URL.revokeObjectURL(product.url);
-    if (advertiser.url) URL.revokeObjectURL(advertiser.url);
+    revokeAssetUrl(product);
+    revokeAssetUrl(product2);
+    revokeAssetUrl(advertiser);
     setProduct(EMPTY_ASSET);
+    setProduct2(EMPTY_ASSET);
     setAdvertiser(EMPTY_ASSET);
     setTemplate("badge");
     setObjectSide("right");
     setMainCopy("니니즈 쫀득쫀득 촉감의 매력");
     setSubCopy("오늘만 10% 추가적립");
-    setAdvertiserText("KAKAO FRIENDS");
+    setAdvertiserText("J.ESTINA");
     setBadgeText("10%");
     setBackground("#F5F5F5");
     setTextColor("#4C4C4C");
@@ -488,16 +524,22 @@ export default function Home() {
     setProductScale(100);
     setProductX(0);
     setProductY(0);
+    setProduct2Scale(82);
+    setProduct2X(62);
+    setProduct2Y(18);
     setShowGuides(true);
     setNotice("초기화했습니다.");
     window.localStorage.removeItem(SETTINGS_KEY);
-    void clearAssets();
+    void clearAssets()
+      .then(() => preparePublicAsset("/jestina-advertiser.png"))
+      .then(setAdvertiser)
+      .catch(() => setNotice("기본 광고주체 이미지를 불러오지 못했습니다."));
   }
 
   async function download(format: "png" | "jpg") {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    if (!product.image) {
+    if (!product.image && !product2.image) {
       setNotice("먼저 상품 이미지를 등록해주세요.");
       return;
     }
@@ -512,7 +554,7 @@ export default function Home() {
     setNotice(`${format.toUpperCase()} 파일을 저장했습니다.`);
   }
 
-  const complete = Boolean(product.image && (advertiser.image || advertiserText.trim()) && mainCopy.trim() && subCopy.trim());
+  const complete = Boolean((product.image || product2.image) && (advertiser.image || advertiserText.trim()) && mainCopy.trim() && subCopy.trim());
   const typeInfo = TYPE_COPY[template];
 
   return (
@@ -566,12 +608,21 @@ export default function Home() {
               </div>
             )}
 
-            <UploadField label="상품 이미지" hint="투명 배경 PNG 권장" asset={product} assetKey="product" onFile={setAsset} onPaste={pasteAsset} />
+            <UploadField label="상품 이미지 1" hint="투명 배경 PNG 권장" asset={product} assetKey="product" onFile={setAsset} onPaste={pasteAsset} />
             <div className="adjust-box">
-              <div className="adjust-heading"><strong>상품 이미지 조절</strong><button type="button" onClick={() => { setProductScale(100); setProductX(0); setProductY(0); }}>조절값 초기화</button></div>
+              <div className="adjust-heading"><strong>이미지 1 조절</strong><button type="button" onClick={() => { setProductScale(100); setProductX(0); setProductY(0); }}>조절값 초기화</button></div>
               <RangeField label="크기" value={productScale} min={55} max={180} unit="%" onChange={setProductScale} />
               <RangeField label="가로 위치" value={productX} min={-120} max={120} unit="px" onChange={setProductX} />
               <RangeField label="세로 위치" value={productY} min={-90} max={90} unit="px" onChange={setProductY} />
+            </div>
+
+            <UploadField label="상품 이미지 2" hint="선택 입력 · 이미지 1 위에 배치" asset={product2} assetKey="product2" onFile={setAsset} onPaste={pasteAsset} />
+            <div className="adjust-box second-layer">
+              <div className="adjust-heading"><strong>이미지 2 조절</strong><button type="button" onClick={() => { setProduct2Scale(82); setProduct2X(62); setProduct2Y(18); }}>조절값 초기화</button></div>
+              <p className="layer-note">이미지 2는 이미지 1 위에 그려져 겹침 구성을 만들 수 있습니다.</p>
+              <RangeField label="크기" value={product2Scale} min={40} max={180} unit="%" onChange={setProduct2Scale} />
+              <RangeField label="가로 위치" value={product2X} min={-150} max={150} unit="px" onChange={setProduct2X} />
+              <RangeField label="세로 위치" value={product2Y} min={-100} max={100} unit="px" onChange={setProduct2Y} />
             </div>
 
             <div className="field-block">
@@ -588,9 +639,9 @@ export default function Home() {
             )}
 
             <div className="field-block">
-              <div className="field-heading"><div><strong>광고주체 표기</strong><span>이미지 등록 시 텍스트 대신 사용</span></div></div>
+              <div className="field-heading"><div><strong>광고주체 표기</strong><span>제이에스티나 로고가 기본 적용됩니다.</span></div></div>
               <label className="text-input"><span>명칭</span><input value={advertiserText} maxLength={24} onChange={(event) => setAdvertiserText(event.target.value)} /></label>
-              <UploadField label="워드마크 / 로고" hint="선택 입력" asset={advertiser} assetKey="advertiser" onFile={setAsset} onPaste={pasteAsset} />
+              <UploadField label="워드마크 / 로고" hint="기본값 · J.ESTINA" asset={advertiser} assetKey="advertiser" onFile={setAsset} onPaste={pasteAsset} />
             </div>
 
             <div className="field-block compact">
@@ -607,7 +658,7 @@ export default function Home() {
             <div className="preview-stage">
               <div className="creative-frame">
                 <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="카카오 비즈보드 소재 미리보기" />
-                {!product.image && <div className={`product-placeholder ${template} ${objectSide}`}>상품 이미지</div>}
+                {!product.image && !product2.image && <div className={`product-placeholder ${template} ${objectSide}`}>상품 이미지 1 · 2</div>}
                 {showGuides && (
                   <div className={`guide-overlay ${template} ${objectSide}`}>
                     <div className="guide-copy"><span>카피 영역</span></div>
@@ -633,12 +684,16 @@ export default function Home() {
         <div className="guide-cards">
           <article><span>01</span><h3>광고주체 표기</h3>{template === "badge" ? <ul><li>기존 오브젝트 영역 안에서 표기합니다.</li><li>오브젝트 좌·우 정렬에 맞춰 하단 끝에 배치합니다.</li><li>카피·오브젝트의 가독성을 침범하지 않는 크기로 구성합니다.</li></ul> : <ul><li>중앙 오브젝트형은 카피 영역 내 표기가 허용됩니다.</li><li>카피 영역 좌측 최상단 또는 우측 최상단에 정렬합니다.</li><li>영역 내 자유 배치나 카피와의 겹침은 불가합니다.</li></ul>}</article>
           <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>메인·서브 카피는 각각 최대 1줄로 사용합니다.</li><li>오브젝트와 겹치지 않고 충분한 여백을 확보합니다.</li><li>기울기·왜곡·과도한 자간 등 임의 변형은 불가합니다.</li></ul> : <ul><li>오브젝트 양쪽 카피의 시각적 균형을 맞춥니다.</li><li>각 카피는 최대 1줄, Pretendard 사용을 권장합니다.</li><li>오브젝트와 카피 사이에 명확한 간격을 확보합니다.</li></ul>}</article>
-          <article><span>03</span><h3>오브젝트 가이드</h3>{template === "badge" ? <ul><li>933×258 영역 안에서 좌측 또는 우측 정렬이 가능합니다.</li><li>단일 오브젝트 최대 크기는 438×258입니다.</li><li>배지 플래그는 오브젝트 좌·우 정렬일 때만 사용합니다.</li></ul> : <ul><li>오브젝트를 소재 중앙에 배치하고 양쪽 균형을 유지합니다.</li><li>인지가 어려운 작은 이미지나 저화질 이미지는 사용할 수 없습니다.</li><li>오브젝트 최대 크기는 438×258을 넘지 않습니다.</li></ul>}</article>
+          <article><span>03</span><h3>오브젝트 가이드</h3>{template === "badge" ? <ul><li>933×258 영역 안에서 좌측 또는 우측 정렬이 가능합니다.</li><li>상품 이미지 2개를 각각 조절하고 겹쳐 배치할 수 있습니다.</li><li>단일 오브젝트 최대 크기는 438×258입니다.</li><li>배지 플래그는 오브젝트 좌·우 정렬일 때만 사용합니다.</li></ul> : <ul><li>오브젝트를 소재 중앙에 배치하고 양쪽 균형을 유지합니다.</li><li>상품 이미지 2개를 각각 조절하고 겹쳐 배치할 수 있습니다.</li><li>인지가 어려운 작은 이미지나 저화질 이미지는 사용할 수 없습니다.</li><li>오브젝트 최대 크기는 438×258을 넘지 않습니다.</li></ul>}</article>
         </div>
         <p className="review-note"><b>심사 유의사항</b> 규격을 지켜도 소재 구성이 조화롭지 않거나 의미 전달이 불명확하면 심사가 보류될 수 있습니다.</p>
       </section>
 
-      <footer><span>KAKAO MAKER</span><p>카카오 비즈보드 PSD 제작 가이드 v2025.07.09 기준</p></footer>
+      <footer>
+        <span>KAKAO MAKER</span>
+        <p>카카오 비즈보드 PSD 제작 가이드 v2025.07.09 기준</p>
+        <p>문의사항 및 추가 요청 사항은 <a href="mailto:somin.jo@playd.com">somin.jo@playd.com</a>으로 연락바랍니다.</p>
+      </footer>
     </main>
   );
 }
