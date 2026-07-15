@@ -11,8 +11,10 @@
 export function computeEdgeExtensionTiles(foreground, targetWidth, targetHeight, imageWidth, imageHeight) {
   const sourceBandWidth = Math.max(1, imageWidth * .18);
   const sourceBandHeight = Math.max(1, imageHeight * .18);
-  const bandWidth = Math.max(.01, foreground.width * .18);
-  const bandHeight = Math.max(.01, foreground.height * .18);
+  const maximumHorizontalGap = Math.max(0, foreground.x, targetWidth - foreground.x - foreground.width);
+  const maximumVerticalGap = Math.max(0, foreground.y, targetHeight - foreground.y - foreground.height);
+  const bandWidth = Math.max(.01, foreground.width * .18, maximumHorizontalGap / 12);
+  const bandHeight = Math.max(.01, foreground.height * .18, maximumVerticalGap / 12);
   const leftCount = Math.ceil(Math.max(0, foreground.x) / bandWidth);
   const rightCount = Math.ceil(Math.max(0, targetWidth - foreground.x - foreground.width) / bandWidth);
   const topCount = Math.ceil(Math.max(0, foreground.y) / bandHeight);
@@ -73,11 +75,11 @@ function drawTile(ctx, image, tile) {
 export function renderPlanToContext(ctx, image, targetWidth, targetHeight, plan) {
   ctx.save();
   ctx.clearRect(0, 0, targetWidth, targetHeight);
-  ctx.fillStyle = "#eceef2";
-  ctx.fillRect(0, 0, targetWidth, targetHeight);
   ctx.filter = "none";
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = "#eceef2";
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
 

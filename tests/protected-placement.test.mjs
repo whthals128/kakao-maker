@@ -68,6 +68,14 @@ test("edge extension never blurs and draws the untouched foreground last", () =>
   assert.deepEqual(draws.at(-1).args, [image, foreground.x, foreground.y, foreground.width, foreground.height]);
 });
 
+test("edge extension stays bounded for extreme custom aspect ratios", () => {
+  const foreground = { x: 49940, y: 2, width: 120, height: 36 };
+  const tiles = computeEdgeExtensionTiles(foreground, 100000, 40, 900, 1600);
+  assert.ok(tiles.length > 0);
+  assert.ok(tiles.length <= 624);
+  assert.ok(tiles.every((tile) => Number.isFinite(tile.x) && Number.isFinite(tile.y) && tile.width > 0 && tile.height > 0));
+});
+
 test("crop remains a real cover crop and centers the protected region", () => {
   const plan = computePlacement({
     mode: "crop",
