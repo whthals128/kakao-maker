@@ -12,6 +12,8 @@ import {
 const WIDTH = 300;
 const HEIGHT = 464;
 const MAX_BYTES = 400 * 1024;
+const LOGO_BOX = { x: 24, y: 40, width: 252, height: 28 };
+const PRODUCT_BOX = { x: 24, y: 92, width: 252, height: 229 };
 
 type AssetKey = "logo" | "product";
 type AssetState = {
@@ -33,18 +35,25 @@ function fitImage(
   image: HTMLImageElement,
   box: { x: number; y: number; width: number; height: number },
   scalePercent: number,
+  offsetY = 0,
 ) {
   const baseScale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
   const scale = baseScale * (scalePercent / 100);
   const width = image.naturalWidth * scale;
   const height = image.naturalHeight * scale;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(box.x, box.y, box.width, box.height);
+  ctx.clip();
   ctx.drawImage(
     image,
     box.x + (box.width - width) / 2,
-    box.y + (box.height - height) / 2,
+    box.y + (box.height - height) / 2 + offsetY,
     width,
     height,
   );
+  ctx.restore();
 }
 
 function drawFittedText(
@@ -154,6 +163,7 @@ export default function Home() {
   const [line2Size, setLine2Size] = useState(23);
   const [logoScale, setLogoScale] = useState(100);
   const [productScale, setProductScale] = useState(100);
+  const [productOffsetY, setProductOffsetY] = useState(0);
   const [showGuides, setShowGuides] = useState(true);
   const [pngBytes, setPngBytes] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
@@ -175,15 +185,15 @@ export default function Home() {
     ctx.imageSmoothingQuality = "high";
 
     if (logo.image) {
-      fitImage(ctx, logo.image, { x: 24, y: 40, width: 252, height: 28 }, logoScale);
+      fitImage(ctx, logo.image, LOGO_BOX, logoScale);
     }
     if (product.image) {
-      fitImage(ctx, product.image, { x: 24, y: 92, width: 252, height: 229 }, productScale);
+      fitImage(ctx, product.image, PRODUCT_BOX, productScale, productOffsetY);
     }
 
     drawFittedText(ctx, line1.trim() || " ", 361.5, text1, line1Size);
     drawFittedText(ctx, line2.trim() || " ", 408.5, text2, line2Size);
-  }, [bg, line1, line1Size, line2, line2Size, logo.image, logoScale, product.image, productScale, text1, text2]);
+  }, [bg, line1, line1Size, line2, line2Size, logo.image, logoScale, product.image, productOffsetY, productScale, text1, text2]);
 
   useEffect(() => {
     draw();
@@ -226,6 +236,7 @@ export default function Home() {
     setLine2Color("#A6572A");
     setLogoScale(100);
     setProductScale(100);
+    setProductOffsetY(0);
     setNotice("");
   }
 
@@ -299,8 +310,8 @@ export default function Home() {
             <button className="text-button" type="button" onClick={reset}>초기화</button>
           </div>
 
-          <UploadField asset={logo} assetKey="logo" label="브랜드 로고" hint="상단 중앙에 자동 배치" onFile={setAsset} />
-          <UploadField asset={product} assetKey="product" label="상품 이미지" hint="중앙 영역에 비율 유지" onFile={setAsset} />
+          <UploadField asset={logo} assetKey="logo" label="브랜드 로고" hint="상단 편집 영역 안에서 확대" onFile={setAsset} />
+          <UploadField asset={product} assetKey="product" label="상품 이미지" hint="중앙 영역에서 확대·위치 조절" onFile={setAsset} />
 
           <div className="field-block">
             <div className="field-heading"><div><strong>광고 문구</strong><span>긴 문구는 영역에 맞춰 자동 축소</span></div></div>
@@ -323,10 +334,12 @@ export default function Home() {
             </div>
           </div>
 
-          <details className="detail-controls">
-            <summary>세부 크기 조정</summary>
-            <RangeField label="로고 크기" value={logoScale} min={50} max={100} onChange={setLogoScale} />
-            <RangeField label="상품 크기" value={productScale} min={55} max={100} onChange={setProductScale} />
+          <details className="detail-controls" open>
+            <summary>이미지 배치 조정</summary>
+            <p className="control-note">빨간 편집 박스 밖으로 나간 이미지는 저장할 때 잘립니다.</p>
+            <RangeField label="로고 확대" value={logoScale} min={50} max={500} onChange={setLogoScale} />
+            <RangeField label="상품 확대" value={productScale} min={50} max={400} onChange={setProductScale} />
+            <RangeField label="상품 위·아래" value={productOffsetY} min={-110} max={110} suffix="px" onChange={setProductOffsetY} />
             <RangeField label="1행 글자" value={line1Size} min={16} max={26} suffix="px" onChange={setLine1Size} />
             <RangeField label="2행 글자" value={line2Size} min={16} max={26} suffix="px" onChange={setLine2Size} />
           </details>
@@ -337,7 +350,7 @@ export default function Home() {
             <div><span>02</span><h2>실시간 미리보기</h2></div>
             <label className="switch-label">
               <input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} />
-              <span>안전여백</span>
+              <span>편집 가이드</span>
             </label>
           </div>
 
@@ -346,6 +359,8 @@ export default function Home() {
               <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="포커스템 소재 미리보기" />
               {showGuides && (
                 <div className="guide-overlay" aria-hidden="true">
+                  <span className="guide-zone logo-zone"><b>로고 편집 영역</b></span>
+                  <span className="guide-zone product-zone"><b>상품 편집 영역</b></span>
                   <span className="guide-line top"><b>40</b></span>
                   <span className="guide-line logo-gap"><b>24</b></span>
                   <span className="guide-line product-gap"><b>24</b></span>
