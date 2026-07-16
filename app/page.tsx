@@ -1171,6 +1171,11 @@ export default function Home() {
         <div className="maker-shell">
           <aside className="control-panel">
             <div className="panel-title"><div><span>INPUT</span><h3>소재 구성</h3></div><div className="panel-actions"><span className={saveStatus.startsWith("저장 중") ? "save-status saving" : "save-status"}>{saveStatus}</span><button type="button" onClick={reset}>전체 초기화</button></div></div>
+            <div className="quick-start" role="note">
+              <b>처음이라면 이 순서로 진행하세요</b>
+              <ol><li>상품 이미지 등록</li><li>오른쪽에서 카피 입력</li><li>PNG 소재 저장</li></ol>
+              <p>두 이미지 겹침이나 개별 크기·위치 조정이 필요할 때만 아래 <strong>상세 이미지 조정</strong>을 열어주세요.</p>
+            </div>
 
             {template === "badge" && (
               <div className="field-block compact">
@@ -1182,30 +1187,35 @@ export default function Home() {
               </div>
             )}
 
-            <UploadField label="상품 이미지 1" hint="투명 배경 PNG 권장" asset={product} assetKey="product" onFile={setAsset} onPaste={pasteAsset} />
-            <div className="adjust-box">
-              <div className="adjust-heading"><strong>이미지 1 조절</strong><button type="button" onClick={() => { setProductScale(100); setProductX(0); setProductY(0); }}>조절값 초기화</button></div>
-              <RangeField label="크기" value={productScale} min={55} max={180} unit="%" onChange={setProductScale} />
-              <RangeField label="가로 위치" value={productX} min={-120} max={120} unit="px" onChange={setProductX} />
-              <RangeField label="세로 위치" value={productY} min={-90} max={90} unit="px" onChange={setProductY} />
-            </div>
+            <UploadField label="상품 이미지" hint="먼저 등록해주세요 · 투명 배경 PNG 권장" asset={product} assetKey="product" onFile={setAsset} onPaste={pasteAsset} />
+            <details className="advanced-image-settings">
+              <summary><span><b>상세 이미지 조정</b><small>겹침 · 개별 크기 · 위치</small></span></summary>
+              <div className="advanced-image-content">
+                <div className="adjust-box">
+                  <div className="adjust-heading"><strong>기본 이미지 조절</strong><button type="button" onClick={() => { setProductScale(100); setProductX(0); setProductY(0); }}>조절값 초기화</button></div>
+                  <RangeField label="크기" value={productScale} min={55} max={180} unit="%" onChange={setProductScale} />
+                  <RangeField label="가로 위치" value={productX} min={-120} max={120} unit="px" onChange={setProductX} />
+                  <RangeField label="세로 위치" value={productY} min={-90} max={90} unit="px" onChange={setProductY} />
+                </div>
 
-            <UploadField label="상품 이미지 2" hint="선택 입력 · 이미지 1 위에 배치" asset={product2} assetKey="product2" onFile={setAsset} onPaste={pasteAsset} />
-            <div className="adjust-box second-layer">
-              <div className="adjust-heading"><strong>이미지 2 조절</strong><button type="button" onClick={() => { setProduct2Scale(82); setProduct2X(62); setProduct2Y(18); }}>조절값 초기화</button></div>
-              <p className="layer-note">이미지 2는 이미지 1 위에 그려져 겹침 구성을 만들 수 있습니다.</p>
-              <RangeField label="크기" value={product2Scale} min={40} max={180} unit="%" onChange={setProduct2Scale} />
-              <RangeField label="가로 위치" value={product2X} min={-150} max={150} unit="px" onChange={setProduct2X} />
-              <RangeField label="세로 위치" value={product2Y} min={-100} max={100} unit="px" onChange={setProduct2Y} />
-            </div>
+                <UploadField label="추가 이미지" hint="선택 입력 · 기본 이미지 위에 배치" asset={product2} assetKey="product2" onFile={setAsset} onPaste={pasteAsset} />
+                <div className="adjust-box second-layer">
+                  <div className="adjust-heading"><strong>추가 이미지 조절</strong><button type="button" onClick={() => { setProduct2Scale(82); setProduct2X(62); setProduct2Y(18); }}>조절값 초기화</button></div>
+                  <p className="layer-note">추가 이미지는 기본 이미지 위에 그려져 겹침 구성을 만들 수 있습니다.</p>
+                  <RangeField label="크기" value={product2Scale} min={40} max={180} unit="%" onChange={setProduct2Scale} />
+                  <RangeField label="가로 위치" value={product2X} min={-150} max={150} unit="px" onChange={setProduct2X} />
+                  <RangeField label="세로 위치" value={product2Y} min={-100} max={100} unit="px" onChange={setProduct2Y} />
+                </div>
 
-            {product.image && product2.image && (
-              <div className="adjust-box group-adjust">
-                <div className="adjust-heading"><strong>두 이미지 함께 조절</strong><button type="button" onClick={() => changeGroupScaleOffset(0)}>공용 크기 초기화</button></div>
-                <p className="layer-note">두 이미지의 현재 크기 차이를 유지한 채 함께 확대·축소합니다.</p>
-                <RangeField label="함께 크기" value={groupScaleOffset} min={-40} max={40} unit="%" onChange={changeGroupScaleOffset} />
+                {product.image && product2.image && (
+                  <div className="adjust-box group-adjust">
+                    <div className="adjust-heading"><strong>두 이미지 함께 조절</strong><button type="button" onClick={() => changeGroupScaleOffset(0)}>공용 크기 초기화</button></div>
+                    <p className="layer-note">두 이미지의 현재 크기 차이를 유지한 채 함께 확대·축소합니다.</p>
+                    <RangeField label="함께 크기" value={groupScaleOffset} min={-40} max={40} unit="%" onChange={changeGroupScaleOffset} />
+                  </div>
+                )}
               </div>
-            )}
+            </details>
 
             {template === "badge" && (
               <div className="field-block">
@@ -1255,24 +1265,27 @@ export default function Home() {
                 )}
               </div>
             </div>
-            <div className="drag-toolbar">
-              <span>미리보기에서 이동할 이미지</span>
-              <div className="layer-selector">
-                <button type="button" disabled={!product.image} className={activeProduct === "product" ? "active" : ""} onClick={() => setActiveProduct("product")}>이미지 1</button>
-                <button type="button" disabled={!product2.image} className={activeProduct === "product2" ? "active" : ""} onClick={() => setActiveProduct("product2")}>이미지 2</button>
-                <button type="button" disabled={!product.image || !product2.image} className={activeProduct === "both" ? "active" : ""} onClick={() => setActiveProduct("both")}>두 이미지 함께</button>
+            <details className="advanced-preview-settings">
+              <summary>미리보기에서 이미지 위치·크기 상세 조정</summary>
+              <div className="drag-toolbar">
+                <span>조정할 이미지</span>
+                <div className="layer-selector">
+                  <button type="button" disabled={!product.image} className={activeProduct === "product" ? "active" : ""} onClick={() => setActiveProduct("product")}>기본 이미지</button>
+                  <button type="button" disabled={!product2.image} className={activeProduct === "product2" ? "active" : ""} onClick={() => setActiveProduct("product2")}>추가 이미지</button>
+                  <button type="button" disabled={!product.image || !product2.image} className={activeProduct === "both" ? "active" : ""} onClick={() => setActiveProduct("both")}>두 이미지</button>
+                </div>
+                <div className="zoom-controls">
+                  <button type="button" onClick={() => zoomActive(-5)} aria-label="선택 이미지 축소">−</button>
+                  <b>{activeProduct === "product" ? productScale : activeProduct === "product2" ? product2Scale : `${productScale}·${product2Scale}`}%</b>
+                  <button type="button" onClick={() => zoomActive(5)} aria-label="선택 이미지 확대">+</button>
+                </div>
+                <small>이미지를 클릭해 선택 · 겹친 곳은 반복 클릭 · 드래그로 이동</small>
               </div>
-              <div className="zoom-controls">
-                <button type="button" onClick={() => zoomActive(-5)} aria-label="선택 이미지 축소">−</button>
-                <b>{activeProduct === "product" ? productScale : activeProduct === "product2" ? product2Scale : `${productScale}·${product2Scale}`}%</b>
-                <button type="button" onClick={() => zoomActive(5)} aria-label="선택 이미지 확대">+</button>
-              </div>
-              <small>이미지를 클릭해 선택 · 겹친 곳은 반복 클릭 · 드래그로 이동</small>
-            </div>
+            </details>
             <div className="preview-stage">
               <div className="creative-frame">
                 <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="카카오 비즈보드 소재 미리보기" />
-                {!product.image && !product2.image && <div className={`product-placeholder ${template} ${objectSide}`}>상품 이미지 1 · 2</div>}
+                {!product.image && !product2.image && <div className={`product-placeholder ${template} ${objectSide}`}>상품 이미지</div>}
                 <div
                   className={`canvas-drag-surface ${isDragging ? "dragging" : ""}`}
                   onPointerDown={startObjectDrag}
@@ -1280,7 +1293,7 @@ export default function Home() {
                   onPointerUp={endObjectDrag}
                   onPointerCancel={endObjectDrag}
                   onWheel={wheelObjectZoom}
-                  aria-label={`${activeProduct === "product" ? "상품 이미지 1" : activeProduct === "product2" ? "상품 이미지 2" : "두 상품 이미지"} 이동 및 확대 영역`}
+                  aria-label={`${activeProduct === "product" ? "기본 상품 이미지" : activeProduct === "product2" ? "추가 상품 이미지" : "두 상품 이미지"} 이동 및 확대 영역`}
                 />
                 {showGuides && (
                   <div className={`guide-overlay ${template} ${objectSide}`}>
@@ -1304,10 +1317,10 @@ export default function Home() {
                   </div>
                 )}
                 {showGuides && (activeProduct === "product" || activeProduct === "both") && productRect && (
-                  <div className="image-selection image-one" style={{ left: `${productRect.x / WIDTH * 100}%`, top: `${productRect.y / HEIGHT * 100}%`, width: `${productRect.width / WIDTH * 100}%`, height: `${productRect.height / HEIGHT * 100}%` }}><span>이미지 1 선택</span></div>
+                  <div className="image-selection image-one" style={{ left: `${productRect.x / WIDTH * 100}%`, top: `${productRect.y / HEIGHT * 100}%`, width: `${productRect.width / WIDTH * 100}%`, height: `${productRect.height / HEIGHT * 100}%` }}><span>기본 이미지 선택</span></div>
                 )}
                 {showGuides && (activeProduct === "product2" || activeProduct === "both") && product2Rect && (
-                  <div className="image-selection image-two" style={{ left: `${product2Rect.x / WIDTH * 100}%`, top: `${product2Rect.y / HEIGHT * 100}%`, width: `${product2Rect.width / WIDTH * 100}%`, height: `${product2Rect.height / HEIGHT * 100}%` }}><span>이미지 2 선택</span></div>
+                  <div className="image-selection image-two" style={{ left: `${product2Rect.x / WIDTH * 100}%`, top: `${product2Rect.y / HEIGHT * 100}%`, width: `${product2Rect.width / WIDTH * 100}%`, height: `${product2Rect.height / HEIGHT * 100}%` }}><span>추가 이미지 선택</span></div>
                 )}
               </div>
             </div>
