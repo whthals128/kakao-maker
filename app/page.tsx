@@ -68,6 +68,7 @@ type TemplateDraft = {
   subCopyEnabled: boolean;
   centerLeftSubEnabled: boolean;
   centerRightSubEnabled: boolean;
+  badgeEnabled: boolean;
   mainFontSize: number;
   subFontSize: number;
   mainAlign: CopyAlign;
@@ -100,6 +101,7 @@ type Settings = {
   subCopyEnabled: boolean;
   centerLeftSubEnabled: boolean;
   centerRightSubEnabled: boolean;
+  badgeEnabled: boolean;
   mainFontSize: number;
   subFontSize: number;
   mainAlign: CopyAlign;
@@ -123,6 +125,7 @@ type Settings = {
   groupScaleOffset: number;
   showGuides: boolean;
   inquiry: string;
+  advertiserImageEnabled: boolean;
   templateDrafts?: Record<TemplateType, TemplateDraft>;
 };
 
@@ -130,7 +133,7 @@ const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
   badge: {
     objectSide: "right", mainCopy: "귀여운 플레이디 공룡 특가!", subCopy: "오늘만 10% 추가적립",
     centerLeftSub: "오늘만 10% 추가적립", centerRightSub: "니니즈 스페셜 필로우", advertiserText: "J.ESTINA",
-    subCopyEnabled: true, centerLeftSubEnabled: false, centerRightSubEnabled: false,
+    subCopyEnabled: true, centerLeftSubEnabled: false, centerRightSubEnabled: false, badgeEnabled: true,
     mainFontSize: DEFAULT_MAIN_FONT_SIZE, subFontSize: DEFAULT_SUB_FONT_SIZE,
     mainAlign: "left", subAlign: "left", centerLeftMainAlign: "left", centerRightMainAlign: "right",
     centerLeftSubAlign: "left", centerRightSubAlign: "right",
@@ -141,7 +144,7 @@ const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
   center: {
     objectSide: "right", mainCopy: "쫀득쫀득", subCopy: "바디필로우",
     centerLeftSub: "", centerRightSub: "", advertiserText: "J.ESTINA",
-    subCopyEnabled: true, centerLeftSubEnabled: false, centerRightSubEnabled: false,
+    subCopyEnabled: true, centerLeftSubEnabled: false, centerRightSubEnabled: false, badgeEnabled: true,
     mainFontSize: DEFAULT_MAIN_FONT_SIZE, subFontSize: DEFAULT_SUB_FONT_SIZE,
     mainAlign: "left", subAlign: "left", centerLeftMainAlign: "left", centerRightMainAlign: "right",
     centerLeftSubAlign: "left", centerRightSubAlign: "right",
@@ -165,6 +168,7 @@ function mergeTemplateDraft(template: TemplateType, saved: Partial<TemplateDraft
     subCopyEnabled: typeof saved.subCopyEnabled === "boolean" ? saved.subCopyEnabled : Boolean(merged.subCopy.trim()),
     centerLeftSubEnabled: typeof saved.centerLeftSubEnabled === "boolean" ? saved.centerLeftSubEnabled : Boolean(merged.centerLeftSub.trim()),
     centerRightSubEnabled: typeof saved.centerRightSubEnabled === "boolean" ? saved.centerRightSubEnabled : Boolean(merged.centerRightSub.trim()),
+    badgeEnabled: typeof saved.badgeEnabled === "boolean" ? saved.badgeEnabled : fallback.badgeEnabled,
     mainFontSize: Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, Number.isFinite(mainSize) ? mainSize : fallback.mainFontSize)),
     subFontSize: Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, Number.isFinite(subSize) ? subSize : fallback.subFontSize)),
     mainAlign: normalizeCopyAlign(merged.mainAlign, fallback.mainAlign),
@@ -245,6 +249,17 @@ async function readAsset(key: StoredAssetKey) {
   });
   database.close();
   return result;
+}
+
+async function deleteStoredAsset(key: StoredAssetKey) {
+  const database = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readwrite");
+    transaction.objectStore(STORE_NAME).delete(key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
 }
 
 async function clearAssets() {
@@ -418,11 +433,13 @@ function drawAdvertiser(
     ctx.drawImage(asset.image, left, y - height, width, height);
     return;
   }
+  const advertiserName = text.trim();
+  if (!advertiserName) return;
   ctx.fillStyle = "#202020";
   ctx.font = "800 18px Pretendard, 'Noto Sans KR', sans-serif";
   ctx.textAlign = align;
   ctx.textBaseline = "bottom";
-  ctx.fillText(text.trim() || "광고주체", x, y, 110);
+  ctx.fillText(advertiserName, x, y, 110);
 }
 
 function UploadField({
@@ -432,6 +449,7 @@ function UploadField({
   assetKey,
   onFile,
   onPaste,
+  onRemove,
 }: {
   label: string;
   hint: string;
@@ -439,6 +457,7 @@ function UploadField({
   assetKey: AssetKey;
   onFile: (key: AssetKey, file?: File) => void;
   onPaste: (key: AssetKey) => void;
+  onRemove: (key: AssetKey) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -495,9 +514,10 @@ function UploadField({
           </>
         )}
       </div>
-      <div className="upload-actions">
+      <div className={`upload-actions ${asset.image ? "has-remove" : ""}`}>
         <button className="file-button" type="button" onClick={() => inputRef.current?.click()}>파일 선택</button>
         <button className="paste-button" type="button" onClick={() => onPaste(assetKey)}>클립보드 붙여넣기 <kbd>Ctrl</kbd><b>+</b><kbd>V</kbd></button>
+        {asset.image && <button className="remove-button" type="button" onClick={() => onRemove(assetKey)} aria-label={`${label} 삭제`}>삭제</button>}
       </div>
     </div>
   );
@@ -570,13 +590,15 @@ export default function Home() {
   const [product, setProduct] = useState<AssetState>(EMPTY_ASSET);
   const [product2, setProduct2] = useState<AssetState>(EMPTY_ASSET);
   const [advertiser, setAdvertiser] = useState<AssetState>(EMPTY_ASSET);
-  const [mainCopy, setMainCopy] = useState("쫀득쫀득 촉감의 매력");
-  const [subCopy, setSubCopy] = useState("오늘만 10% 추가적립");
-  const [centerLeftSub, setCenterLeftSub] = useState("오늘만 10% 추가적립");
-  const [centerRightSub, setCenterRightSub] = useState("니니즈 스페셜 필로우");
-  const [subCopyEnabled, setSubCopyEnabled] = useState(true);
-  const [centerLeftSubEnabled, setCenterLeftSubEnabled] = useState(false);
-  const [centerRightSubEnabled, setCenterRightSubEnabled] = useState(false);
+  const [advertiserImageEnabled, setAdvertiserImageEnabled] = useState(true);
+  const [mainCopy, setMainCopy] = useState(DEFAULT_TEMPLATE_DRAFTS.badge.mainCopy);
+  const [subCopy, setSubCopy] = useState(DEFAULT_TEMPLATE_DRAFTS.badge.subCopy);
+  const [centerLeftSub, setCenterLeftSub] = useState(DEFAULT_TEMPLATE_DRAFTS.badge.centerLeftSub);
+  const [centerRightSub, setCenterRightSub] = useState(DEFAULT_TEMPLATE_DRAFTS.badge.centerRightSub);
+  const [subCopyEnabled, setSubCopyEnabled] = useState(DEFAULT_TEMPLATE_DRAFTS.badge.subCopyEnabled);
+  const [centerLeftSubEnabled, setCenterLeftSubEnabled] = useState(DEFAULT_TEMPLATE_DRAFTS.badge.centerLeftSubEnabled);
+  const [centerRightSubEnabled, setCenterRightSubEnabled] = useState(DEFAULT_TEMPLATE_DRAFTS.badge.centerRightSubEnabled);
+  const [badgeEnabled, setBadgeEnabled] = useState(DEFAULT_TEMPLATE_DRAFTS.badge.badgeEnabled);
   const [mainFontSize, setMainFontSize] = useState(DEFAULT_MAIN_FONT_SIZE);
   const [subFontSize, setSubFontSize] = useState(DEFAULT_SUB_FONT_SIZE);
   const [mainAlign, setMainAlign] = useState<CopyAlign>("left");
@@ -651,25 +673,27 @@ export default function Home() {
       const advertiserX = objectSide === "right" ? SAFE_AREA.x + SAFE_AREA.width - 2 : SAFE_AREA.x + 2;
       drawAdvertiser(ctx, advertiser, advertiserText, advertiserX, 226, objectSide === "right" ? "right" : "left");
 
-      const flagX = objectSide === "right"
-        ? SAFE_AREA.x + SAFE_AREA.width - 64
-        : SAFE_AREA.x;
-      ctx.fillStyle = flagColor;
-      traceBadgeFlag(ctx, flagX);
-      ctx.fill();
-      ctx.save();
-      traceBadgeFlag(ctx, flagX);
-      ctx.clip();
-      ctx.fillStyle = "#FFFFFF";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = "800 26px Pretendard, 'Noto Sans KR', sans-serif";
-      ctx.fillText(badgeText.trim() || "10%", flagX + 32, 28);
-      ctx.restore();
+      if (badgeEnabled) {
+        const flagX = objectSide === "right"
+          ? SAFE_AREA.x + SAFE_AREA.width - 64
+          : SAFE_AREA.x;
+        ctx.fillStyle = flagColor;
+        traceBadgeFlag(ctx, flagX);
+        ctx.fill();
+        ctx.save();
+        traceBadgeFlag(ctx, flagX);
+        ctx.clip();
+        ctx.fillStyle = "#FFFFFF";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "800 26px Pretendard, 'Noto Sans KR', sans-serif";
+        ctx.fillText(badgeText.trim() || "10%", flagX + 32, 28);
+        ctx.restore();
+      }
     } else {
       drawAdvertiser(ctx, advertiser, advertiserText, SAFE_AREA.x + SAFE_AREA.width - 2, 42, "right");
     }
-  }, [advertiser, advertiserText, badgeText, bg, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, flagColor, fontsReady, mainAlign, mainCopy, mainFontSize, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subAlign, subCopy, subCopyEnabled, subFontSize, template]);
+  }, [advertiser, advertiserText, badgeEnabled, badgeText, bg, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, flagColor, fontsReady, mainAlign, mainCopy, mainFontSize, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subAlign, subCopy, subCopyEnabled, subFontSize, template]);
 
   const validateLayout = useCallback(() => {
     const issues: string[] = [];
@@ -677,7 +701,7 @@ export default function Home() {
     const firstRect = getVisibleImageRect(product.image, productBox, productScale, productX, productY);
     const secondRect = getVisibleImageRect(product2.image, productBox, product2Scale, product2X, product2Y);
 
-    if (template === "badge") {
+    if (template === "badge" && badgeEnabled) {
       const flagCopy = badgeText.trim();
       const flagRect = {
         x: objectSide === "right" ? SAFE_AREA.x + SAFE_AREA.width - 64 : SAFE_AREA.x,
@@ -694,7 +718,7 @@ export default function Home() {
       }
     }
     return Array.from(new Set(issues));
-  }, [badgeText, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, template]);
+  }, [badgeEnabled, badgeText, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, template]);
 
   useEffect(() => {
     let cancelled = false;
@@ -722,6 +746,7 @@ export default function Home() {
     async function restore() {
       try {
         let restoredTemplate: TemplateType = "badge";
+        let restoreAdvertiserImageEnabled = true;
         const raw = window.localStorage.getItem(SETTINGS_KEY);
         if (raw) {
           const saved = JSON.parse(raw) as Partial<Settings>;
@@ -739,7 +764,9 @@ export default function Home() {
           applyTemplateDraft(templateDraftsRef.current[savedTemplate]);
           if (typeof saved.showGuides === "boolean") setShowGuides(saved.showGuides);
           if (typeof saved.inquiry === "string") setInquiry(saved.inquiry);
+          if (typeof saved.advertiserImageEnabled === "boolean") restoreAdvertiserImageEnabled = saved.advertiserImageEnabled;
         }
+        setAdvertiserImageEnabled(restoreAdvertiserImageEnabled);
         const [badgeProduct, badgeProduct2, centerProduct, centerProduct2, legacyProduct, legacyProduct2, storedAdvertiser] = await Promise.all([
           readAsset("badge:product"), readAsset("badge:product2"), readAsset("center:product"), readAsset("center:product2"),
           readAsset("product"), readAsset("product2"), readAsset("advertiser"),
@@ -752,9 +779,11 @@ export default function Home() {
           prepareStored(badgeProduct2 ?? (restoredTemplate === "badge" ? legacyProduct2 : undefined)),
           prepareStored(centerProduct ?? (restoredTemplate === "center" ? legacyProduct : undefined)),
           prepareStored(centerProduct2 ?? (restoredTemplate === "center" ? legacyProduct2 : undefined)),
-          storedAdvertiser
-            ? prepareAsset(new File([storedAdvertiser.blob], storedAdvertiser.name, { type: storedAdvertiser.type }))
-            : preparePublicAsset("/jestina-advertiser.png"),
+          restoreAdvertiserImageEnabled
+            ? storedAdvertiser
+              ? prepareAsset(new File([storedAdvertiser.blob], storedAdvertiser.name, { type: storedAdvertiser.type }))
+              : preparePublicAsset("/jestina-advertiser.png")
+            : Promise.resolve(null),
         ]);
         if (cancelled) {
           if (nextBadgeProduct) revokeAssetUrl(nextBadgeProduct);
@@ -790,7 +819,7 @@ export default function Home() {
     const timer = window.setTimeout(() => {
       const currentDraft: TemplateDraft = {
         objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
-        subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize,
+        subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, badgeEnabled, mainFontSize, subFontSize,
         mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
         background, textColor, badgeColor, productScale, productX, productY,
         product2Scale, product2X, product2Y, activeProduct, groupScaleOffset,
@@ -798,10 +827,10 @@ export default function Home() {
       templateDraftsRef.current[template] = currentDraft;
       const settings: Settings = {
         template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
-        subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize,
+        subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, badgeEnabled, mainFontSize, subFontSize,
         mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
         background, textColor, badgeColor, productScale, productX, productY,
-        product2Scale, product2X, product2Y, activeProduct, groupScaleOffset, showGuides, inquiry,
+        product2Scale, product2X, product2Y, activeProduct, groupScaleOffset, showGuides, inquiry, advertiserImageEnabled,
         templateDrafts: {
           badge: { ...templateDraftsRef.current.badge },
           center: { ...templateDraftsRef.current.center },
@@ -814,12 +843,13 @@ export default function Home() {
       window.clearTimeout(savingTimer);
       window.clearTimeout(timer);
     };
-  }, [activeProduct, advertiserText, background, badgeColor, badgeText, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, draftReady, groupScaleOffset, inquiry, mainAlign, mainCopy, mainFontSize, objectSide, product2Scale, product2X, product2Y, productScale, productX, productY, showGuides, subAlign, subCopy, subCopyEnabled, subFontSize, template, textColor]);
+  }, [activeProduct, advertiserImageEnabled, advertiserText, background, badgeColor, badgeEnabled, badgeText, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, draftReady, groupScaleOffset, inquiry, mainAlign, mainCopy, mainFontSize, objectSide, product2Scale, product2X, product2Y, productScale, productX, productY, showGuides, subAlign, subCopy, subCopyEnabled, subFontSize, template, textColor]);
 
   function setAsset(key: AssetKey, file?: File) {
     if (!file || !file.type.startsWith("image/")) return;
     void prepareAsset(file).then(async (next) => {
       if (key === "advertiser") {
+        setAdvertiserImageEnabled(true);
         setAdvertiser((current) => {
           revokeAssetUrl(current);
           return next;
@@ -838,6 +868,46 @@ export default function Home() {
       setSaveStatus("자동 저장됨");
       setNotice(`${key === "advertiser" ? "광고주체 이미지" : key === "product2" ? "상품 이미지 2" : "상품 이미지 1"}를 적용했습니다.`);
     }).catch(() => setNotice("이미지 파일을 읽지 못했습니다. PNG, JPG 또는 WEBP 파일을 사용해주세요."));
+  }
+
+  async function removeAsset(key: AssetKey) {
+    try {
+      if (key === "advertiser") {
+        setAdvertiser((current) => {
+          revokeAssetUrl(current);
+          return EMPTY_ASSET;
+        });
+        setAdvertiserImageEnabled(false);
+        await deleteStoredAsset("advertiser");
+        setNotice("광고주체 로고 이미지를 삭제했습니다. 명칭은 유지됩니다.");
+        return;
+      }
+
+      const current = key === "product" ? product : product2;
+      revokeAssetUrl(current);
+      const setter = key === "product" ? setProduct : setProduct2;
+      setter(EMPTY_ASSET);
+      templateAssetsRef.current[template][key] = EMPTY_ASSET;
+      await Promise.all([
+        deleteStoredAsset(`${template}:${key}`),
+        deleteStoredAsset(key),
+      ]);
+
+      const remainingLayer: ActiveLayer = key === "product"
+        ? product2.image ? "product2" : "product"
+        : product.image ? "product" : "product2";
+      if (activeProduct === key || activeProduct === "both") setActiveProduct(remainingLayer);
+      setGroupScaleOffset(0);
+      setNotice(`${key === "product2" ? "추가 이미지" : "상품 이미지"}를 삭제했습니다.`);
+    } catch {
+      setNotice("이미지를 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.");
+    }
+  }
+
+  async function clearAdvertiser() {
+    setAdvertiserText("");
+    await removeAsset("advertiser");
+    setNotice("광고주체 표기를 삭제했습니다. PNG 저장 전 광고주체를 다시 입력해주세요.");
   }
 
   async function pasteAsset(key: AssetKey) {
@@ -863,7 +933,7 @@ export default function Home() {
   function currentTemplateDraft(): TemplateDraft {
     return {
       objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
-      subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize,
+      subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, badgeEnabled, mainFontSize, subFontSize,
       mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
       background, textColor, badgeColor, productScale, productX, productY,
       product2Scale, product2X, product2Y, activeProduct, groupScaleOffset,
@@ -879,6 +949,7 @@ export default function Home() {
     setSubCopyEnabled(draft.subCopyEnabled);
     setCenterLeftSubEnabled(draft.centerLeftSubEnabled);
     setCenterRightSubEnabled(draft.centerRightSubEnabled);
+    setBadgeEnabled(draft.badgeEnabled);
     setMainFontSize(Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, draft.mainFontSize)));
     setSubFontSize(Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, draft.subFontSize)));
     setMainAlign(draft.mainAlign);
@@ -1034,38 +1105,11 @@ export default function Home() {
       center: { product: EMPTY_ASSET, product2: EMPTY_ASSET },
     };
     setTemplate("badge");
-    setObjectSide("right");
-    setMainCopy("귀여운 플레이디 공룡 특가!");
-    setSubCopy("오늘만 10% 추가적립");
-    setCenterLeftSub("");
-    setCenterRightSub("");
-    setSubCopyEnabled(true);
-    setCenterLeftSubEnabled(false);
-    setCenterRightSubEnabled(false);
-    setMainFontSize(DEFAULT_MAIN_FONT_SIZE);
-    setSubFontSize(DEFAULT_SUB_FONT_SIZE);
-    setMainAlign("left");
-    setSubAlign("left");
-    setCenterLeftMainAlign("left");
-    setCenterRightMainAlign("right");
-    setCenterLeftSubAlign("left");
-    setCenterRightSubAlign("right");
-    setAdvertiserText("J.ESTINA");
-    setBadgeText("10%");
-    setBackground("#F5F5F5");
-    setTextColor("#4C4C4C");
-    setBadgeColor("#FF3B00");
-    setProductScale(100);
-    setProductX(0);
-    setProductY(0);
-    setProduct2Scale(82);
-    setProduct2X(62);
-    setProduct2Y(18);
-    setActiveProduct("product");
-    setGroupScaleOffset(0);
+    applyTemplateDraft(DEFAULT_TEMPLATE_DRAFTS.badge);
+    setAdvertiserImageEnabled(true);
     setShowGuides(true);
     setInquiry("");
-    setNotice("초기화했습니다.");
+    setNotice("현재 기본 버전으로 복원하고 등록 이미지를 삭제했습니다.");
     window.localStorage.removeItem(SETTINGS_KEY);
     void clearAssets()
       .then(() => preparePublicAsset("/jestina-advertiser.png"))
@@ -1164,7 +1208,7 @@ export default function Home() {
           </div>
         <div className="maker-shell">
           <aside className="control-panel">
-            <div className="panel-title"><div><span>INPUT</span><h3>소재 구성</h3></div><div className="panel-actions"><span className={saveStatus.startsWith("저장 중") ? "save-status saving" : "save-status"}>{saveStatus}</span><button type="button" onClick={reset}>전체 초기화</button></div></div>
+            <div className="panel-title"><div><span>INPUT</span><h3>소재 구성</h3></div><div className="panel-actions"><span className={saveStatus.startsWith("저장 중") ? "save-status saving" : "save-status"}>{saveStatus}</span><button type="button" onClick={reset}>기본 버전 복원</button></div></div>
             <div className="quick-start" role="note">
               <b>처음이라면 이 순서로 진행하세요</b>
               <ol><li>상품 이미지 등록</li><li>오른쪽에서 디자인 세부 조정</li><li>PNG 소재 저장</li></ol>
@@ -1181,25 +1225,25 @@ export default function Home() {
               </div>
             )}
 
-            <UploadField label="상품 이미지" hint="먼저 등록해주세요 · 투명 배경 PNG 권장" asset={product} assetKey="product" onFile={setAsset} onPaste={pasteAsset} />
+            <UploadField label="상품 이미지" hint="먼저 등록해주세요 · 투명 배경 PNG 권장" asset={product} assetKey="product" onFile={setAsset} onPaste={pasteAsset} onRemove={(key) => void removeAsset(key)} />
             <section className="secondary-image-upload">
               <div className="static-section-heading"><span>추가 이미지 등록</span><small>선택</small></div>
               <div className="secondary-image-content">
-                <UploadField label="추가 이미지" hint="선택 입력 · 기본 이미지 위에 배치" asset={product2} assetKey="product2" onFile={setAsset} onPaste={pasteAsset} />
+                <UploadField label="추가 이미지" hint="선택 입력 · 기본 이미지 위에 배치" asset={product2} assetKey="product2" onFile={setAsset} onPaste={pasteAsset} onRemove={(key) => void removeAsset(key)} />
               </div>
             </section>
 
             {template === "badge" && (
-              <div className="field-block">
-                <div className="field-heading"><div><strong>배지 플래그</strong><span>혜택 정보 1어절 · 특수기호 %, !, +만 허용</span></div></div>
-                <div className="inline-fields"><label className="text-input"><span>문구</span><input value={badgeText} onChange={(event) => setBadgeText(event.target.value)} /></label><label className="color-input"><input type="color" value={flagColor} onChange={(event) => setBadgeColor(event.target.value)} /><input value={badgeColor} onChange={(event) => setBadgeColor(event.target.value)} aria-label="배지 색상 코드" /></label></div>
+              <div className={`field-block badge-field ${badgeEnabled ? "" : "off"}`}>
+                <div className="field-heading"><div><strong>배지 플래그</strong><span>혜택 정보 1어절 · 특수기호 %, !, +만 허용</span></div><button className="badge-use-toggle" type="button" aria-pressed={badgeEnabled} onClick={() => setBadgeEnabled((enabled) => !enabled)}>{badgeEnabled ? "ON" : "OFF"}</button></div>
+                <div className="inline-fields"><label className="text-input"><span>문구</span><input value={badgeText} disabled={!badgeEnabled} onChange={(event) => setBadgeText(event.target.value)} /></label><label className="color-input"><input type="color" value={flagColor} disabled={!badgeEnabled} onChange={(event) => setBadgeColor(event.target.value)} /><input value={badgeColor} disabled={!badgeEnabled} onChange={(event) => setBadgeColor(event.target.value)} aria-label="배지 색상 코드" /></label></div>
               </div>
             )}
 
             <div className="field-block">
-              <div className="field-heading"><div><strong>광고주체 표기</strong><span>제이에스티나 로고가 기본 적용됩니다.</span></div></div>
+              <div className="field-heading"><div><strong>광고주체 표기</strong><span>제이에스티나 로고가 기본 적용됩니다.</span></div><button className="field-remove-button" type="button" onClick={() => void clearAdvertiser()}>표기 삭제</button></div>
               <label className="text-input"><span>명칭</span><input value={advertiserText} maxLength={24} onChange={(event) => setAdvertiserText(event.target.value)} /></label>
-              <UploadField label="워드마크 / 로고" hint="기본값 · J.ESTINA" asset={advertiser} assetKey="advertiser" onFile={setAsset} onPaste={pasteAsset} />
+              <UploadField label="워드마크 / 로고" hint="기본값 · J.ESTINA" asset={advertiser} assetKey="advertiser" onFile={setAsset} onPaste={pasteAsset} onRemove={(key) => void removeAsset(key)} />
             </div>
 
             <div className="field-block compact">
@@ -1320,7 +1364,7 @@ export default function Home() {
                     )}
                     <div className="guide-object"><span>오브젝트 최대영역 438×258</span>{template === "center" && <i className="object-half-line"><b>배너 중앙</b></i>}</div>
                     <div className="guide-ad"><span>광고주체</span></div>
-                    {template === "badge" && <div className="guide-flag"><span>배지</span></div>}
+                    {template === "badge" && badgeEnabled && <div className="guide-flag"><span>배지</span></div>}
                   </div>
                 )}
                 {showGuides && (activeProduct === "product" || activeProduct === "both") && productRect && (
@@ -1354,7 +1398,7 @@ export default function Home() {
         <div className="section-heading light"><span>GUIDE</span><div><h2 id="guide-title">{typeInfo.title} 제작 가이드</h2><p>현재 선택한 유형에 적용되는 핵심 심사 기준입니다.</p></div></div>
         <div className="guide-cards">
           <article><span>01</span><h3>광고주체 표기</h3>{template === "badge" ? <ul><li>기존 오브젝트 영역 안에서 반드시 표기합니다.</li><li>오브젝트 좌·우 정렬에 맞춰 하단 끝에 배치합니다.</li><li>카피·오브젝트의 가독성을 침범하지 않는 크기로 구성합니다.</li></ul> : <ul><li>중앙 오브젝트형에 한해 카피 영역 내 표기가 허용됩니다.</li><li>지정 영역 좌측 최상단 또는 우측 최상단 정렬만 가능합니다.</li><li>영역 내 자유 배치나 카피·오브젝트와의 밀착은 불가합니다.</li></ul>}</article>
-          <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>메인·서브 카피는 각각 최대 1줄입니다.</li><li>메인은 Pretendard Bold, 39~51pt, #4C4C4C입니다.</li><li>서브는 Pretendard Regular, 39~51pt, #777777입니다.</li><li>서브는 ON/OFF할 수 있으며 배지 플래그는 1어절로 구성합니다.</li></ul> : <ul><li>좌·우 메인과 좌·우 서브는 각각 최대 1줄입니다.</li><li>메인·서브 모두 39~51pt 범위에서 1pt 단위로 조절합니다.</li><li>같은 카피 유형은 좌우 크기·굵기·색상을 동일하게 적용합니다.</li><li>좌·우 서브는 각각 ON/OFF하고 모든 카피의 정렬을 선택할 수 있습니다.</li></ul>}</article>
+          <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>메인·서브 카피는 각각 최대 1줄입니다.</li><li>메인은 Pretendard Bold, 39~51pt, #4C4C4C입니다.</li><li>서브는 Pretendard Regular, 39~51pt, #777777입니다.</li><li>서브와 배지는 각각 ON/OFF할 수 있으며, 배지 사용 시 1어절로 구성합니다.</li></ul> : <ul><li>좌·우 메인과 좌·우 서브는 각각 최대 1줄입니다.</li><li>메인·서브 모두 39~51pt 범위에서 1pt 단위로 조절합니다.</li><li>같은 카피 유형은 좌우 크기·굵기·색상을 동일하게 적용합니다.</li><li>좌·우 서브는 각각 ON/OFF하고 모든 카피의 정렬을 선택할 수 있습니다.</li></ul>}</article>
           <article><span>03</span><h3>오브젝트·출력 가이드</h3>{template === "badge" ? <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트는 좌측 또는 우측에 두며 중앙 배열은 불가합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>카피·오브젝트가 허용영역을 넘으면 바깥 부분은 자동으로 잘립니다.</li></ul> : <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트 그룹을 소재 중앙 최대영역 안에 배치합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>좌우 카피·오브젝트가 허용영역을 넘으면 바깥 부분은 자동으로 잘립니다.</li></ul>}</article>
         </div>
         <p className="review-note"><b>심사 유의사항</b> PNG-24/32, 300KB 이하로 등록해야 합니다. 본 완화 가이드는 카카오 제공 PSD 템플릿 사용을 전제로 하므로 최종 집행 전 PSD 템플릿과 모먼트 에셋 기준을 함께 확인하세요.</p>
