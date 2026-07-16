@@ -8,7 +8,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const title = "Kakao Maker | 카카오 비즈보드 소재 제작";
-  const description = "배지 플래그형과 중앙 오브젝트형 카카오 비즈보드 소재를 933×258 규격으로 제작합니다.";
+  const description = "배지 플래그형과 중앙 오브젝트형 카카오 비즈보드 소재를 공식 1029×258 규격과 실시간 가이드 점검으로 제작합니다.";
 
   return {
     title,

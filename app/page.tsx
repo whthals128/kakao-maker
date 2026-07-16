@@ -12,8 +12,18 @@ import {
   useState,
 } from "react";
 
-const WIDTH = 933;
+const WIDTH = 1029;
 const HEIGHT = 258;
+const SAFE_AREA: Rect = { x: 48, y: 0, width: 933, height: 258 };
+const COPY_AREA: Rect = { x: 48, y: 51, width: 933, height: 156 };
+const OBJECT_MAX_WIDTH = 438;
+const MIN_COPY_OBJECT_GAP = 33;
+const MAX_FILE_BYTES = 300 * 1024;
+const MAIN_COPY_COLOR = "#4C4C4C";
+const SUB_COPY_COLOR = "#777777";
+const MAIN_COPY_MAX_SIZE = 43;
+const MAIN_COPY_MIN_SIZE = 39;
+const SUB_COPY_SIZE = 39;
 const SETTINGS_KEY = "kakao-maker:settings:v1";
 const DB_NAME = "kakao-maker-assets";
 const STORE_NAME = "assets";
@@ -26,6 +36,17 @@ type StoredAssetKey = AssetKey | `${TemplateType}:${ProductAssetKey}`;
 type ActiveLayer = "product" | "product2" | "both";
 type ProductLayer = "product" | "product2";
 type Rect = { x: number; y: number; width: number; height: number };
+type CopyLine = {
+  label: string;
+  text: string;
+  x: number;
+  baseline: number;
+  maxWidth: number;
+  align: CanvasTextAlign;
+  size: number;
+  weight: 400 | 700;
+  color: string;
+};
 type AssetState = { file: File | null; image: HTMLImageElement | null; url: string };
 type StoredAsset = { blob: Blob; name: string; type: string };
 type TemplateDraft = {
@@ -75,15 +96,15 @@ type Settings = {
 
 const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
   badge: {
-    objectSide: "right", mainCopy: "니니즈 쫀득쫀득 촉감의 매력", subCopy: "오늘만 10% 추가적립",
+    objectSide: "right", mainCopy: "쫀득쫀득 촉감의 매력", subCopy: "오늘만 10% 추가적립",
     centerLeftSub: "오늘만 10% 추가적립", centerRightSub: "니니즈 스페셜 필로우", advertiserText: "J.ESTINA",
     badgeText: "10%", background: "#F5F5F5", textColor: "#4C4C4C", badgeColor: "#FF3B00",
     productScale: 100, productX: 0, productY: 0, product2Scale: 82, product2X: 62, product2Y: 18,
     activeProduct: "product", groupScaleOffset: 0,
   },
   center: {
-    objectSide: "right", mainCopy: "쫀득쫀득 촉감의", subCopy: "니니즈 필로우",
-    centerLeftSub: "오늘만 10% 추가적립", centerRightSub: "니니즈 스페셜 필로우", advertiserText: "J.ESTINA",
+    objectSide: "right", mainCopy: "쫀득쫀득", subCopy: "바디필로우",
+    centerLeftSub: "", centerRightSub: "", advertiserText: "J.ESTINA",
     badgeText: "10%", background: "#F5F5F5", textColor: "#4C4C4C", badgeColor: "#FF3B00",
     productScale: 100, productX: 0, productY: 0, product2Scale: 82, product2X: 62, product2Y: 18,
     activeProduct: "product", groupScaleOffset: 0,
@@ -172,14 +193,135 @@ async function clearAssets() {
   database.close();
 }
 
-function fitFont(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, preferred: number, weight = 700) {
+function fitFont(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  preferred: number,
+  weight: 400 | 700 = 700,
+  minimum = MAIN_COPY_MIN_SIZE,
+) {
   let size = preferred;
-  while (size > 24) {
+  while (size > minimum) {
     ctx.font = `${weight} ${size}px Pretendard, "Noto Sans KR", sans-serif`;
     if (ctx.measureText(text).width <= maxWidth) break;
     size -= 1;
   }
   return size;
+}
+
+function getProductBox(template: TemplateType, objectSide: ObjectSide): Rect {
+  if (template === "center") {
+    return { x: Math.round((WIDTH - OBJECT_MAX_WIDTH) / 2), y: 0, width: OBJECT_MAX_WIDTH, height: HEIGHT };
+  }
+  return objectSide === "right"
+    ? { x: SAFE_AREA.x + SAFE_AREA.width - OBJECT_MAX_WIDTH, y: 0, width: OBJECT_MAX_WIDTH, height: HEIGHT }
+    : { x: SAFE_AREA.x, y: 0, width: OBJECT_MAX_WIDTH, height: HEIGHT };
+}
+
+function getCopyLines(
+  ctx: CanvasRenderingContext2D,
+  template: TemplateType,
+  objectSide: ObjectSide,
+  mainCopy: string,
+  subCopy: string,
+  centerLeftSub: string,
+  centerRightSub: string,
+) {
+  if (template === "badge") {
+    const productBox = getProductBox(template, objectSide);
+    const align: CanvasTextAlign = objectSide === "right" ? "left" : "right";
+    const x = objectSide === "right" ? SAFE_AREA.x : SAFE_AREA.x + SAFE_AREA.width;
+    const maxWidth = objectSide === "right"
+      ? productBox.x - MIN_COPY_OBJECT_GAP - x
+      : x - (productBox.x + productBox.width + MIN_COPY_OBJECT_GAP);
+    const mainSize = fitFont(ctx, mainCopy, maxWidth, MAIN_COPY_MAX_SIZE, 700);
+    return [
+      { label: "메인카피", text: mainCopy.trim(), x, baseline: 118, maxWidth, align, size: mainSize, weight: 700, color: MAIN_COPY_COLOR },
+      { label: "서브카피", text: subCopy.trim(), x, baseline: 166, maxWidth, align, size: SUB_COPY_SIZE, weight: 400, color: SUB_COPY_COLOR },
+    ] satisfies CopyLine[];
+  }
+
+  const productBox = getProductBox(template, objectSide);
+  const leftX = SAFE_AREA.x;
+  const rightX = SAFE_AREA.x + SAFE_AREA.width;
+  const leftWidth = productBox.x - MIN_COPY_OBJECT_GAP - leftX;
+  const rightWidth = rightX - (productBox.x + productBox.width + MIN_COPY_OBJECT_GAP);
+  return [
+    {
+      label: "좌측 메인카피", text: mainCopy.trim(), x: leftX, baseline: 118, maxWidth: leftWidth, align: "left",
+      size: fitFont(ctx, mainCopy, leftWidth, MAIN_COPY_MAX_SIZE, 700), weight: 700, color: MAIN_COPY_COLOR,
+    },
+    {
+      label: "좌측 서브카피", text: centerLeftSub.trim(), x: leftX, baseline: 166, maxWidth: leftWidth, align: "left",
+      size: SUB_COPY_SIZE, weight: 400, color: SUB_COPY_COLOR,
+    },
+    {
+      label: "우측 메인카피", text: subCopy.trim(), x: rightX, baseline: 118, maxWidth: rightWidth, align: "right",
+      size: fitFont(ctx, subCopy, rightWidth, MAIN_COPY_MAX_SIZE, 700), weight: 700, color: MAIN_COPY_COLOR,
+    },
+    {
+      label: "우측 서브카피", text: centerRightSub.trim(), x: rightX, baseline: 166, maxWidth: rightWidth, align: "right",
+      size: SUB_COPY_SIZE, weight: 400, color: SUB_COPY_COLOR,
+    },
+  ] satisfies CopyLine[];
+}
+
+function measureCopyLine(ctx: CanvasRenderingContext2D, line: CopyLine): Rect {
+  ctx.font = `${line.weight} ${line.size}px Pretendard, "Noto Sans KR", sans-serif`;
+  const metrics = ctx.measureText(line.text);
+  const width = metrics.width;
+  const ascent = metrics.actualBoundingBoxAscent || line.size * .8;
+  const descent = metrics.actualBoundingBoxDescent || line.size * .2;
+  const x = line.align === "right" ? line.x - width : line.x;
+  return { x, y: line.baseline - ascent, width, height: ascent + descent };
+}
+
+function getImageRect(
+  image: HTMLImageElement | null,
+  box: Rect,
+  scalePercent: number,
+  offsetX: number,
+  offsetY: number,
+) {
+  if (!image) return null;
+  const baseScale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
+  const scale = baseScale * (scalePercent / 100);
+  const width = image.naturalWidth * scale;
+  const height = image.naturalHeight * scale;
+  return {
+    x: box.x + (box.width - width) / 2 + offsetX,
+    y: box.y + (box.height - height) / 2 + offsetY,
+    width,
+    height,
+  };
+}
+
+function unionRects(rects: Array<Rect | null>) {
+  const available = rects.filter((rect): rect is Rect => Boolean(rect));
+  if (!available.length) return null;
+  const left = Math.min(...available.map((rect) => rect.x));
+  const top = Math.min(...available.map((rect) => rect.y));
+  const right = Math.max(...available.map((rect) => rect.x + rect.width));
+  const bottom = Math.max(...available.map((rect) => rect.y + rect.height));
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+function containsRect(container: Rect, rect: Rect) {
+  return rect.x >= container.x && rect.y >= container.y
+    && rect.x + rect.width <= container.x + container.width
+    && rect.y + rect.height <= container.y + container.height;
+}
+
+function horizontalGap(first: Rect, second: Rect) {
+  if (first.x + first.width <= second.x) return second.x - (first.x + first.width);
+  if (second.x + second.width <= first.x) return first.x - (second.x + second.width);
+  return -1;
+}
+
+function intersectsRect(first: Rect, second: Rect) {
+  return first.x < second.x + second.width && first.x + first.width > second.x
+    && first.y < second.y + second.height && first.y + first.height > second.y;
 }
 
 function drawContainedImage(
@@ -382,7 +524,7 @@ export default function Home() {
   const [product, setProduct] = useState<AssetState>(EMPTY_ASSET);
   const [product2, setProduct2] = useState<AssetState>(EMPTY_ASSET);
   const [advertiser, setAdvertiser] = useState<AssetState>(EMPTY_ASSET);
-  const [mainCopy, setMainCopy] = useState("니니즈 쫀득쫀득 촉감의 매력");
+  const [mainCopy, setMainCopy] = useState("쫀득쫀득 촉감의 매력");
   const [subCopy, setSubCopy] = useState("오늘만 10% 추가적립");
   const [centerLeftSub, setCenterLeftSub] = useState("오늘만 10% 추가적립");
   const [centerRightSub, setCenterRightSub] = useState("니니즈 스페셜 필로우");
@@ -406,16 +548,12 @@ export default function Home() {
   const [inquiry, setInquiry] = useState("");
   const [saveStatus, setSaveStatus] = useState("자동 저장 준비 중");
   const [fileBytes, setFileBytes] = useState<number | null>(null);
+  const [layoutIssues, setLayoutIssues] = useState<string[]>([]);
   const [draftReady, setDraftReady] = useState(false);
 
   const bg = normalizeHex(background, "#F5F5F5");
-  const copyColor = normalizeHex(textColor, "#4C4C4C");
   const flagColor = normalizeHex(badgeColor, "#FF3B00");
-  const currentProductBox: Rect = template === "center"
-    ? { x: 248, y: 0, width: 438, height: 258 }
-    : objectSide === "right"
-      ? { x: 544, y: 0, width: 342, height: 258 }
-      : { x: 47, y: 0, width: 342, height: 258 };
+  const currentProductBox = getProductBox(template, objectSide);
   const productRect = getVisibleImageRect(product.image, currentProductBox, productScale, productX, productY);
   const product2Rect = getVisibleImageRect(product2.image, currentProductBox, product2Scale, product2X, product2Y);
 
@@ -431,31 +569,27 @@ export default function Home() {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    if (template === "badge") {
-      const productBox = objectSide === "right"
-        ? { x: 544, y: 0, width: 342, height: 258 }
-        : { x: 47, y: 0, width: 342, height: 258 };
-      const copyX = objectSide === "right" ? 47 : 886;
-      const copyAlign: CanvasTextAlign = objectSide === "right" ? "left" : "right";
-      const copyWidth = 500;
+    const productBox = getProductBox(template, objectSide);
+    if (product.image) drawContainedImage(ctx, product.image, productBox, productScale, productX, productY);
+    if (product2.image) drawContainedImage(ctx, product2.image, productBox, product2Scale, product2X, product2Y);
 
-      if (product.image) drawContainedImage(ctx, product.image, productBox, productScale, productX, productY);
-      if (product2.image) drawContainedImage(ctx, product2.image, productBox, product2Scale, product2X, product2Y);
-
-      ctx.fillStyle = copyColor;
-      ctx.textAlign = copyAlign;
+    const copyLines = getCopyLines(ctx, template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub);
+    for (const line of copyLines) {
+      if (!line.text) continue;
+      ctx.fillStyle = line.color;
+      ctx.textAlign = line.align;
       ctx.textBaseline = "alphabetic";
-      const mainSize = fitFont(ctx, mainCopy, copyWidth, 43, 700);
-      ctx.font = `700 ${mainSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      ctx.fillText(mainCopy.trim() || "메인카피", copyX, 118, copyWidth);
-      const subSize = fitFont(ctx, subCopy, copyWidth, 32, 400);
-      ctx.font = `400 ${subSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      ctx.fillText(subCopy.trim() || "서브카피", copyX, 166, copyWidth);
+      ctx.font = `${line.weight} ${line.size}px Pretendard, "Noto Sans KR", sans-serif`;
+      ctx.fillText(line.text, line.x, line.baseline);
+    }
 
-      const advertiserX = objectSide === "right" ? 884 : 49;
+    if (template === "badge") {
+      const advertiserX = objectSide === "right" ? SAFE_AREA.x + SAFE_AREA.width - 2 : SAFE_AREA.x + 2;
       drawAdvertiser(ctx, advertiser, advertiserText, advertiserX, 226, objectSide === "right" ? "right" : "left");
 
-      const flagX = objectSide === "right" ? 841 : 29;
+      const flagX = objectSide === "right"
+        ? SAFE_AREA.x + SAFE_AREA.width - 64
+        : SAFE_AREA.x;
       ctx.fillStyle = flagColor;
       ctx.beginPath();
       ctx.moveTo(flagX, 0);
@@ -471,39 +605,63 @@ export default function Home() {
       ctx.font = "800 26px Pretendard, 'Noto Sans KR', sans-serif";
       ctx.fillText(badgeText.trim() || "10%", flagX + 32, 28, 58);
     } else {
-      const productBox = { x: 248, y: 0, width: 438, height: 258 };
-      if (product.image) drawContainedImage(ctx, product.image, productBox, productScale, productX, productY);
-      if (product2.image) drawContainedImage(ctx, product2.image, productBox, product2Scale, product2X, product2Y);
-
-      ctx.fillStyle = copyColor;
-      ctx.textBaseline = "alphabetic";
-      ctx.textAlign = "left";
-      const leftSize = fitFont(ctx, mainCopy, 190, 40, 700);
-      ctx.font = `700 ${leftSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      ctx.fillText(mainCopy.trim() || "좌측 메인카피", 47, 126, 190);
-      ctx.fillStyle = "#777777";
-      const leftSubSize = fitFont(ctx, centerLeftSub, 190, 27, 400);
-      ctx.font = `400 ${leftSubSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      if (centerLeftSub.trim()) ctx.fillText(centerLeftSub.trim(), 47, 164, 190);
-
-      ctx.fillStyle = copyColor;
-      ctx.textAlign = "right";
-      const rightSize = fitFont(ctx, subCopy, 190, 40, 700);
-      ctx.font = `700 ${rightSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      ctx.fillText(subCopy.trim() || "우측 메인카피", 886, 126, 190);
-      ctx.fillStyle = "#777777";
-      const rightSubSize = fitFont(ctx, centerRightSub, 190, 27, 400);
-      ctx.font = `400 ${rightSubSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      if (centerRightSub.trim()) ctx.fillText(centerRightSub.trim(), 886, 164, 190);
-      drawAdvertiser(ctx, advertiser, advertiserText, 884, 42, "right");
+      drawAdvertiser(ctx, advertiser, advertiserText, SAFE_AREA.x + SAFE_AREA.width - 2, 42, "right");
     }
-  }, [advertiser, advertiserText, badgeText, bg, centerLeftSub, centerRightSub, copyColor, flagColor, fontsReady, mainCopy, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subCopy, template]);
+  }, [advertiser, advertiserText, badgeText, bg, centerLeftSub, centerRightSub, flagColor, fontsReady, mainCopy, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subCopy, template]);
+
+  const validateLayout = useCallback((ctx: CanvasRenderingContext2D) => {
+    const issues: string[] = [];
+    const productBox = getProductBox(template, objectSide);
+    const firstRect = getImageRect(product.image, productBox, productScale, productX, productY);
+    const secondRect = getImageRect(product2.image, productBox, product2Scale, product2X, product2Y);
+    const combinedRect = unionRects([firstRect, secondRect]);
+    if ([firstRect, secondRect].some((rect) => rect && !containsRect(productBox, rect))) {
+      issues.push("오브젝트가 438×258 최대 영역에서 잘립니다. 크기를 줄이거나 안쪽으로 이동하세요.");
+    }
+    if (combinedRect && (combinedRect.width > OBJECT_MAX_WIDTH + .5 || combinedRect.height > HEIGHT + .5)) {
+      issues.push("두 이미지를 합친 오브젝트 그룹이 최대 438×258을 초과합니다.");
+    }
+
+    const lines = getCopyLines(ctx, template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub);
+    let spacingIssue = false;
+    for (const line of lines) {
+      if (!line.text) continue;
+      const lineRect = measureCopyLine(ctx, line);
+      if (lineRect.width > line.maxWidth + .5 || !containsRect(COPY_AREA, lineRect)) {
+        issues.push(`${line.label}가 1줄 허용영역을 벗어납니다. 문구를 줄여 39pt 이상으로 맞춰주세요.`);
+      }
+      if (combinedRect && horizontalGap(lineRect, combinedRect) < MIN_COPY_OBJECT_GAP) spacingIssue = true;
+    }
+    if (spacingIssue) issues.push("카피와 오브젝트 사이 최소 간격 33px을 확보하세요.");
+
+    if (template === "badge") {
+      const flagCopy = badgeText.trim();
+      const flagRect = {
+        x: objectSide === "right" ? SAFE_AREA.x + SAFE_AREA.width - 64 : SAFE_AREA.x,
+        y: 0,
+        width: 64,
+        height: 78,
+      };
+      if (combinedRect && intersectsRect(combinedRect, flagRect)) {
+        issues.push("오브젝트와 배지 플래그가 겹칩니다. 이미지 크기나 위치를 조정하세요.");
+      }
+      if (!flagCopy || /\s/u.test(flagCopy)) issues.push("배지 플래그 문구는 띄어쓰기 없는 1어절로 입력하세요.");
+      if (flagCopy && (!/^[\p{L}\p{N}%!+]+$/u.test(flagCopy) || /[%!+]{2,}/u.test(flagCopy))) {
+        issues.push("배지 플래그 특수기호는 %, !, +만 사용할 수 있고 연속 기재할 수 없습니다.");
+      }
+      ctx.font = "800 26px Pretendard, 'Noto Sans KR', sans-serif";
+      if (flagCopy && ctx.measureText(flagCopy).width > 58) {
+        issues.push("배지 플래그 문구가 배지 영역을 벗어납니다. 더 짧은 1어절로 입력하세요.");
+      }
+    }
+    return Array.from(new Set(issues));
+  }, [badgeText, centerLeftSub, centerRightSub, mainCopy, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subCopy, template]);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      document.fonts.load("400 27px Pretendard"),
-      document.fonts.load("700 40px Pretendard"),
+      document.fonts.load("400 39px Pretendard"),
+      document.fonts.load("700 43px Pretendard"),
       document.fonts.load("800 26px Pretendard"),
     ]).finally(() => {
       if (!cancelled) setFontsReady(true);
@@ -513,11 +671,13 @@ export default function Home() {
 
   useEffect(() => {
     draw();
+    const context = canvasRef.current?.getContext("2d");
+    if (context) setLayoutIssues(validateLayout(context));
     const timer = window.setTimeout(() => {
       canvasRef.current?.toBlob((blob) => setFileBytes(blob?.size ?? null), "image/png");
     }, 80);
     return () => window.clearTimeout(timer);
-  }, [draw]);
+  }, [draw, validateLayout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -823,10 +983,10 @@ export default function Home() {
     };
     setTemplate("badge");
     setObjectSide("right");
-    setMainCopy("니니즈 쫀득쫀득 촉감의 매력");
+    setMainCopy("쫀득쫀득 촉감의 매력");
     setSubCopy("오늘만 10% 추가적립");
-    setCenterLeftSub("오늘만 10% 추가적립");
-    setCenterRightSub("니니즈 스페셜 필로우");
+    setCenterLeftSub("");
+    setCenterRightSub("");
     setAdvertiserText("J.ESTINA");
     setBadgeText("10%");
     setBackground("#F5F5F5");
@@ -850,22 +1010,30 @@ export default function Home() {
       .catch(() => setNotice("기본 광고주체 이미지를 불러오지 못했습니다."));
   }
 
-  async function download(format: "png" | "jpg") {
+  async function download() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    if (!product.image && !product2.image) {
-      setNotice("먼저 상품 이미지를 등록해주세요.");
+    if (!complete) {
+      setNotice("상품 이미지·카피·광고주체를 먼저 입력해주세요.");
       return;
     }
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, `image/${format === "jpg" ? "jpeg" : "png"}`, .94));
+    if (layoutIssues.length) {
+      setNotice(layoutIssues[0]);
+      return;
+    }
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) return;
+    if (blob.size > MAX_FILE_BYTES) {
+      setNotice(`PNG 용량이 ${Math.ceil(blob.size / 1024)}KB입니다. 공식 상한 300KB 이하로 이미지 크기나 수를 조정해주세요.`);
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `kakao-bizboard-${template}-933x258.${format}`;
+    link.download = `kakao-bizboard-${template}-1029x258.png`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setNotice(`${format.toUpperCase()} 파일을 저장했습니다.`);
+    setNotice("공식 규격 PNG 파일을 저장했습니다.");
   }
 
   function sendInquiry() {
@@ -880,26 +1048,31 @@ export default function Home() {
     setNotice("메일 앱을 열었습니다. 내용을 확인한 뒤 최종 발송해주세요.");
   }
 
-  const complete = Boolean((product.image || product2.image) && (advertiser.image || advertiserText.trim()) && mainCopy.trim() && subCopy.trim());
+  const hasCopy = template === "badge"
+    ? Boolean(mainCopy.trim() || subCopy.trim())
+    : Boolean(mainCopy.trim() || subCopy.trim() || centerLeftSub.trim() || centerRightSub.trim());
+  const complete = Boolean((product.image || product2.image) && (advertiser.image || advertiserText.trim()) && hasCopy);
+  const fileTooLarge = fileBytes !== null && fileBytes > MAX_FILE_BYTES;
+  const readyToDownload = complete && layoutIssues.length === 0 && fileBytes !== null && !fileTooLarge;
   const typeInfo = TYPE_COPY[template];
 
   return (
     <main>
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Kakao Maker 홈"><span className="brand-mark">K</span><b>KAKAO MAKER</b></a>
-        <div className="topbar-meta"><span>KAKAO BIZBOARD</span><i /> <span>933 × 258</span></div>
+        <div className="topbar-meta"><span>KAKAO BIZBOARD</span><i /> <span>1029 × 258</span></div>
       </header>
 
       <section className="hero" id="top">
         <div className="hero-copy">
           <span className="eyebrow">BIZBOARD CREATIVE TOOL</span>
           <h1>카카오 비즈보드,<br /><em>가이드 안에서 자유롭게.</em></h1>
-          <p>유형을 선택하고 카피와 이미지를 넣으면 심사 가이드에 맞춘<br className="desktop-only" /> 933×258 소재를 바로 확인하고 저장할 수 있습니다.</p>
+          <p>유형을 선택하고 카피와 이미지를 넣으면 공식 심사 기준을 실시간 점검해<br className="desktop-only" /> 1029×258 소재로 저장할 수 있습니다.</p>
         </div>
         <div className="hero-spec">
-          <div><span>CANVAS</span><b>933 × 258</b><small>공식 비즈보드 규격</small></div>
+          <div><span>CANVAS</span><b>1029 × 258</b><small>공식 완성 규격</small></div>
+          <div><span>SAFE AREA</span><b>933 × 258</b><small>내부 지정 영역</small></div>
           <div><span>OBJECT</span><b>438 × 258</b><small>오브젝트 최대 영역</small></div>
-          <div><span>TYPEFACE</span><b>Pretendard</b><small>카피 권장 서체</small></div>
         </div>
       </section>
 
@@ -973,8 +1146,8 @@ export default function Home() {
 
             {template === "badge" && (
               <div className="field-block">
-                <div className="field-heading"><div><strong>배지 플래그</strong><span>혜택 정보 한 어절</span></div></div>
-                <div className="inline-fields"><label className="text-input"><span>문구</span><input value={badgeText} maxLength={6} onChange={(event) => setBadgeText(event.target.value)} /></label><label className="color-input"><input type="color" value={flagColor} onChange={(event) => setBadgeColor(event.target.value)} /><input value={badgeColor} onChange={(event) => setBadgeColor(event.target.value)} aria-label="배지 색상 코드" /></label></div>
+                <div className="field-heading"><div><strong>배지 플래그</strong><span>혜택 정보 1어절 · 특수기호 %, !, +만 허용</span></div></div>
+                <div className="inline-fields"><label className="text-input"><span>문구</span><input value={badgeText} onChange={(event) => setBadgeText(event.target.value)} /></label><label className="color-input"><input type="color" value={flagColor} onChange={(event) => setBadgeColor(event.target.value)} /><input value={badgeColor} onChange={(event) => setBadgeColor(event.target.value)} aria-label="배지 색상 코드" /></label></div>
               </div>
             )}
 
@@ -985,10 +1158,10 @@ export default function Home() {
             </div>
 
             <div className="field-block compact">
-              <div className="field-heading"><div><strong>기본 색상</strong><span>가독성 확보 필수</span></div></div>
-              <div className="color-grid">
+              <div className="field-heading"><div><strong>색상</strong><span>카피 컬러는 공식값으로 고정됩니다.</span></div></div>
+              <div className="color-grid compliant-colors">
                 <label><span>배경</span><div><input type="color" value={bg} onChange={(event) => setBackground(event.target.value)} /><input value={background} onChange={(event) => setBackground(event.target.value)} /></div></label>
-                <label><span>카피</span><div><input type="color" value={copyColor} onChange={(event) => setTextColor(event.target.value)} /><input value={textColor} onChange={(event) => setTextColor(event.target.value)} /></div></label>
+                <div className="locked-copy-colors"><span>카피 고정</span><b><i style={{ background: MAIN_COPY_COLOR }} />메인 {MAIN_COPY_COLOR}</b><b><i style={{ background: SUB_COPY_COLOR }} />서브 {SUB_COPY_COLOR}</b></div>
               </div>
             </div>
           </aside>
@@ -996,19 +1169,19 @@ export default function Home() {
           <div className="preview-panel">
             <div className="preview-title"><div><span>LIVE PREVIEW</span><h3>{typeInfo.title}</h3></div>{template === "center" && <span className="center-area-chip">좌측 카피 · 중앙 오브젝트 · 우측 카피</span>}<label><input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> 가이드 영역</label></div>
             <div className="preview-copy-editor">
-              <div className="preview-copy-heading"><strong>카피 바로 입력</strong><span>입력 즉시 미리보기에 반영됩니다</span></div>
+              <div className="preview-copy-heading"><strong>카피 바로 입력</strong><span>글자 수 제한 없음 · 1줄, 39pt 이상, 오브젝트 간격 33px 자동 점검</span></div>
               <div className={`preview-copy-grid ${template}`}>
                 {template === "center" ? (
                   <>
-                    <label><span>좌측 메인</span><input value={mainCopy} maxLength={30} onChange={(event) => setMainCopy(event.target.value)} /></label>
-                    <label><span>좌측 서브 <em>선택</em></span><input value={centerLeftSub} maxLength={30} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterLeftSub(event.target.value)} /></label>
-                    <label><span>우측 메인</span><input value={subCopy} maxLength={30} onChange={(event) => setSubCopy(event.target.value)} /></label>
-                    <label><span>우측 서브 <em>선택</em></span><input value={centerRightSub} maxLength={30} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterRightSub(event.target.value)} /></label>
+                    <label><span>좌측 메인</span><input value={mainCopy} onChange={(event) => setMainCopy(event.target.value)} /></label>
+                    <label><span>좌측 서브 <em>선택</em></span><input value={centerLeftSub} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterLeftSub(event.target.value)} /></label>
+                    <label><span>우측 메인</span><input value={subCopy} onChange={(event) => setSubCopy(event.target.value)} /></label>
+                    <label><span>우측 서브 <em>선택</em></span><input value={centerRightSub} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterRightSub(event.target.value)} /></label>
                   </>
                 ) : (
                   <>
-                    <label><span>메인카피</span><input value={mainCopy} maxLength={30} onChange={(event) => setMainCopy(event.target.value)} /></label>
-                    <label><span>서브카피</span><input value={subCopy} maxLength={30} onChange={(event) => setSubCopy(event.target.value)} /></label>
+                    <label><span>메인카피</span><input value={mainCopy} onChange={(event) => setMainCopy(event.target.value)} /></label>
+                    <label><span>서브카피 <em>선택</em></span><input value={subCopy} placeholder="입력하지 않아도 됩니다" onChange={(event) => setSubCopy(event.target.value)} /></label>
                   </>
                 )}
               </div>
@@ -1042,13 +1215,21 @@ export default function Home() {
                 />
                 {showGuides && (
                   <div className={`guide-overlay ${template} ${objectSide}`}>
+                    <div className="guide-safe"><span>내부 지정영역 933×258</span></div>
                     {template === "center" ? (
                       <>
-                        <div className="guide-copy left"><span>좌측 카피 권장 영역</span></div>
-                        <div className="guide-copy right"><span>우측 카피 권장 영역</span></div>
+                        <div className="guide-copy left"><span>좌측 카피 안전영역</span></div>
+                        <div className="guide-copy right"><span>우측 카피 안전영역</span></div>
+                        <div className="guide-gap left"><span>33px</span></div>
+                        <div className="guide-gap right"><span>33px</span></div>
                       </>
-                    ) : <div className="guide-copy"><span>카피 영역</span></div>}
-                    <div className="guide-object"><span>{template === "center" ? "실제 오브젝트 삽입 영역 438×258" : "오브젝트 최대 438×258"}</span>{template === "center" && <i className="object-half-line"><b>50% 중앙선</b></i>}</div>
+                    ) : (
+                      <>
+                        <div className="guide-copy"><span>카피 안전영역</span></div>
+                        <div className="guide-gap"><span>33px</span></div>
+                      </>
+                    )}
+                    <div className="guide-object"><span>오브젝트 최대영역 438×258</span>{template === "center" && <i className="object-half-line"><b>배너 중앙</b></i>}</div>
                     <div className="guide-ad"><span>광고주체</span></div>
                     {template === "badge" && <div className="guide-flag"><span>배지</span></div>}
                   </div>
@@ -1063,17 +1244,19 @@ export default function Home() {
             </div>
             {showGuides && (
               <div className="guide-legend" role="note">
-                <span className="copy-key"><i />주황: 카피 권장 영역</span>
-                <span className="object-key"><i />파랑: 오브젝트 삽입 영역</span>
-                <b>가이드 박스는 서로 닿지 않게 표시되며, 실제 요소도 겹치지 않게 배치합니다.</b>
+                <span className="copy-key"><i />주황: 카피 안전영역</span>
+                <span className="object-key"><i />파랑: 오브젝트 최대영역</span>
+                <span className="gap-key"><i />노랑: 최소 간격 33px</span>
+                <b>바깥 점선은 완성 배너 안의 933×258 내부 지정영역입니다.</b>
               </div>
             )}
             <div className="preview-meta">
-              <div className={complete ? "status complete" : "status pending"}><i /><div><b>{complete ? "필수 요소 입력 완료" : "필수 요소를 입력해주세요"}</b><small>{complete ? "배치와 가독성을 최종 확인하세요." : "상품 이미지 · 카피 · 광고주체가 필요합니다."}</small></div></div>
-              <div className="file-info"><span>PNG 예상 용량</span><b>{fileBytes === null ? "계산 중" : `${Math.ceil(fileBytes / 1024)} KB`}</b></div>
+              <div className={`status ${readyToDownload ? "complete" : complete ? "error" : "pending"}`}><i /><div><b>{readyToDownload ? "기본 심사 항목 통과" : complete ? "수정이 필요한 항목이 있습니다" : "필수 요소를 입력해주세요"}</b><small>{readyToDownload ? "1029×258 PNG로 저장할 수 있습니다." : complete ? (layoutIssues[0] ?? (fileTooLarge ? "PNG 용량을 300KB 이하로 줄여주세요." : "PNG를 점검하고 있습니다.")) : "상품 이미지 · 카피 · 광고주체가 필요합니다."}</small></div></div>
+              <div className={`file-info ${fileTooLarge ? "too-large" : ""}`}><span>PNG 예상 용량 · 최대 300KB</span><b>{fileBytes === null ? "계산 중" : `${Math.ceil(fileBytes / 1024)} KB`}</b></div>
             </div>
+            {layoutIssues.length > 0 && <div className="compliance-alert" role="alert"><b>가이드 점검</b><ul>{layoutIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul></div>}
             {notice && <p className="notice" role="status">{notice}</p>}
-            <div className="download-row"><button type="button" onClick={() => void download("jpg")}>JPG 저장</button><button className="primary" type="button" onClick={() => void download("png")}><span>PNG 소재 저장</span><small>933 × 258</small></button></div>
+            <div className="download-row"><span>공식 포맷 PNG-24/32 · JPG 저장 미지원</span><button className="primary" type="button" onClick={() => void download()} disabled={!readyToDownload}><span>PNG 소재 저장</span><small>1029 × 258</small></button></div>
           </div>
         </div>
       </section>
@@ -1081,11 +1264,11 @@ export default function Home() {
       <section className="guideline-section" aria-labelledby="guide-title">
         <div className="section-heading light"><span>GUIDE</span><div><h2 id="guide-title">{typeInfo.title} 제작 가이드</h2><p>현재 선택한 유형에 적용되는 핵심 심사 기준입니다.</p></div></div>
         <div className="guide-cards">
-          <article><span>01</span><h3>광고주체 표기</h3>{template === "badge" ? <ul><li>기존 오브젝트 영역 안에서 표기합니다.</li><li>오브젝트 좌·우 정렬에 맞춰 하단 끝에 배치합니다.</li><li>카피·오브젝트의 가독성을 침범하지 않는 크기로 구성합니다.</li></ul> : <ul><li>중앙 오브젝트형은 카피 영역 내 표기가 허용됩니다.</li><li>카피 영역 좌측 최상단 또는 우측 최상단에 정렬합니다.</li><li>영역 내 자유 배치나 카피와의 겹침은 불가합니다.</li></ul>}</article>
-          <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>메인·서브 카피는 각각 최대 1줄로 사용합니다.</li><li>오브젝트와 겹치지 않고 충분한 여백을 확보합니다.</li><li>기울기·왜곡·과도한 자간 등 임의 변형은 불가합니다.</li></ul> : <ul><li>좌·우 각각 메인카피 1줄과 서브카피 1줄을 구성할 수 있습니다.</li><li>서브카피는 선택 입력이며 메인보다 작은 크기와 낮은 위계로 사용합니다.</li><li>오브젝트 양쪽 카피의 시각적 균형과 명확한 간격을 유지합니다.</li></ul>}</article>
-          <article><span>03</span><h3>오브젝트 가이드</h3>{template === "badge" ? <ul><li>933×258 영역 안에서 좌측 또는 우측 정렬이 가능합니다.</li><li>상품 이미지 2개를 각각 조절하고 겹쳐 배치할 수 있습니다.</li><li>단일 오브젝트 최대 크기는 438×258입니다.</li><li>배지 플래그는 오브젝트 좌·우 정렬일 때만 사용합니다.</li></ul> : <ul><li>오브젝트를 소재 중앙에 배치하고 양쪽 균형을 유지합니다.</li><li>상품 이미지 2개를 각각 조절하고 겹쳐 배치할 수 있습니다.</li><li>인지가 어려운 작은 이미지나 저화질 이미지는 사용할 수 없습니다.</li><li>오브젝트 최대 크기는 438×258을 넘지 않습니다.</li></ul>}</article>
+          <article><span>01</span><h3>광고주체 표기</h3>{template === "badge" ? <ul><li>기존 오브젝트 영역 안에서 반드시 표기합니다.</li><li>오브젝트 좌·우 정렬에 맞춰 하단 끝에 배치합니다.</li><li>카피·오브젝트의 가독성을 침범하지 않는 크기로 구성합니다.</li></ul> : <ul><li>중앙 오브젝트형에 한해 카피 영역 내 표기가 허용됩니다.</li><li>지정 영역 좌측 최상단 또는 우측 최상단 정렬만 가능합니다.</li><li>영역 내 자유 배치나 카피·오브젝트와의 밀착은 불가합니다.</li></ul>}</article>
+          <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>메인·서브 카피는 각각 최대 1줄입니다.</li><li>메인 Pretendard Bold 39~51pt, #4C4C4C 고정입니다.</li><li>서브 Pretendard Regular 39~51pt, #777777을 적용합니다.</li><li>배지 플래그는 1어절이며 %, !, + 외 특수기호는 불가합니다.</li></ul> : <ul><li>좌·우 메인과 선택 서브는 각각 최대 1줄입니다.</li><li>메인 Pretendard Bold 39~51pt, #4C4C4C 고정입니다.</li><li>서브 Pretendard Regular 39~51pt, #777777을 적용합니다.</li><li>글자 수 제한 대신 1줄 허용영역 충족 여부로 점검합니다.</li></ul>}</article>
+          <article><span>03</span><h3>오브젝트·출력 가이드</h3>{template === "badge" ? <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트는 좌측 또는 우측에 두며 중앙 배열은 불가합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>카피와 오브젝트 사이 최소 33px을 확보합니다.</li></ul> : <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트 그룹을 소재 중앙 최대영역 안에 배치합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>좌우 카피와 오브젝트 사이 최소 33px을 확보합니다.</li></ul>}</article>
         </div>
-        <p className="review-note"><b>심사 유의사항</b> 규격을 지켜도 소재 구성이 조화롭지 않거나 의미 전달이 불명확하면 심사가 보류될 수 있습니다.</p>
+        <p className="review-note"><b>심사 유의사항</b> PNG-24/32, 300KB 이하로 등록해야 합니다. 본 완화 가이드는 카카오 제공 PSD 템플릿 사용을 전제로 하므로 최종 집행 전 PSD 템플릿과 모먼트 에셋 기준을 함께 확인하세요.</p>
       </section>
 
       <footer>
