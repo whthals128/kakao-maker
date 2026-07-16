@@ -128,7 +128,7 @@ type Settings = {
 
 const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
   badge: {
-    objectSide: "right", mainCopy: "쫀득쫀득 촉감의 매력", subCopy: "오늘만 10% 추가적립",
+    objectSide: "right", mainCopy: "니니즈 쫀득쫀득 촉감의 매력", subCopy: "오늘만 10% 추가적립",
     centerLeftSub: "오늘만 10% 추가적립", centerRightSub: "니니즈 스페셜 필로우", advertiserText: "J.ESTINA",
     subCopyEnabled: true, centerLeftSubEnabled: false, centerRightSubEnabled: false,
     mainFontSize: DEFAULT_MAIN_FONT_SIZE, subFontSize: DEFAULT_SUB_FONT_SIZE,
@@ -1035,7 +1035,7 @@ export default function Home() {
     };
     setTemplate("badge");
     setObjectSide("right");
-    setMainCopy("쫀득쫀득 촉감의 매력");
+    setMainCopy("니니즈 쫀득쫀득 촉감의 매력");
     setSubCopy("오늘만 10% 추가적립");
     setCenterLeftSub("");
     setCenterRightSub("");
