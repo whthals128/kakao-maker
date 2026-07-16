@@ -1194,12 +1194,12 @@ export default function Home() {
             )}
 
             <UploadField label="상품 이미지" hint="먼저 등록해주세요 · 투명 배경 PNG 권장" asset={product} assetKey="product" onFile={setAsset} onPaste={pasteAsset} />
-            <details className="secondary-image-upload">
-              <summary><span>추가 이미지 등록</span><small>선택</small></summary>
+            <section className="secondary-image-upload">
+              <div className="static-section-heading"><span>추가 이미지 등록</span><small>선택</small></div>
               <div className="secondary-image-content">
                 <UploadField label="추가 이미지" hint="선택 입력 · 기본 이미지 위에 배치" asset={product2} assetKey="product2" onFile={setAsset} onPaste={pasteAsset} />
               </div>
-            </details>
+            </section>
 
             {template === "badge" && (
               <div className="field-block">
@@ -1249,8 +1249,8 @@ export default function Home() {
                 )}
               </div>
             </div>
-            <details className="advanced-preview-settings" open>
-              <summary><span>디자인 세부 조정</span><small>이미지 위치 · 크기</small></summary>
+            <section className="advanced-preview-settings">
+              <div className="static-section-heading"><span>디자인 세부 조정</span><small>이미지 위치 · 크기</small></div>
               <div className="drag-toolbar">
                 <span>조정할 이미지</span>
                 <div className="layer-selector">
@@ -1300,7 +1300,7 @@ export default function Home() {
                   <p className="preview-adjust-empty">왼쪽에서 상품 이미지를 먼저 등록해주세요.</p>
                 )}
               </div>
-            </details>
+            </section>
             <div className="preview-stage">
               <div className="creative-frame">
                 <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="카카오 비즈보드 소재 미리보기" />
