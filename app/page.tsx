@@ -301,16 +301,18 @@ function UploadField({
         className="visually-hidden"
         type="file"
         accept="image/png,image/jpeg,image/webp"
-        onChange={(event: ChangeEvent<HTMLInputElement>) => onFile(assetKey, event.target.files?.[0])}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+          onFile(assetKey, event.target.files?.[0]);
+          event.currentTarget.value = "";
+        }}
       />
       <div
         className={`upload-box ${asset.url ? "has-file" : ""}`}
         onDragOver={(event) => event.preventDefault()}
         onDrop={drop}
         onPaste={paste}
-        onClick={() => inputRef.current?.click()}
-        onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && inputRef.current?.click()}
-        role="button"
+        role="group"
+        aria-label={`${label} 이미지 드롭 또는 붙여넣기 영역`}
         tabIndex={0}
       >
         {asset.url ? (
@@ -318,16 +320,19 @@ function UploadField({
             {/* Blob URL from a local upload. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={asset.url} alt={`${label} 미리보기`} />
-            <div className="upload-copy"><b>{asset.file?.name ?? (assetKey === "advertiser" ? "제이에스티나 기본 로고" : "등록된 이미지")}</b><span>클릭하여 교체 · Ctrl+V 가능</span></div>
+            <div className="upload-copy"><b>{asset.file?.name ?? (assetKey === "advertiser" ? "제이에스티나 기본 로고" : "등록된 이미지")}</b><span>Ctrl+V 붙여넣기 또는 드래그 가능</span></div>
           </>
         ) : (
           <>
             <span className="upload-plus">+</span>
-            <div className="upload-copy"><b>이미지 선택</b><span>PNG 투명 배경 권장 · 드래그 가능</span></div>
+            <div className="upload-copy"><b>이미지 드롭·붙여넣기 영역</b><span>PNG 투명 배경 권장 · Ctrl+V 가능</span></div>
           </>
         )}
       </div>
-      <button className="paste-button" type="button" onClick={() => onPaste(assetKey)}>클립보드 이미지 붙여넣기 <kbd>Ctrl</kbd><b>+</b><kbd>V</kbd></button>
+      <div className="upload-actions">
+        <button className="file-button" type="button" onClick={() => inputRef.current?.click()}>파일 선택</button>
+        <button className="paste-button" type="button" onClick={() => onPaste(assetKey)}>클립보드 붙여넣기 <kbd>Ctrl</kbd><b>+</b><kbd>V</kbd></button>
+      </div>
     </div>
   );
 }

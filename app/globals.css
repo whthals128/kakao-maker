@@ -115,7 +115,9 @@ button { cursor: pointer; }
 .upload-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 3px; }
 .upload-copy b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .upload-copy span { color: var(--muted); font-size: 8px; }
-.paste-button { width: 100%; min-height: 31px; margin-top: 6px; border: 1px solid #e0dbd2; border-radius: 8px; background: white; color: #686259; font-size: 8px; font-weight: 700; }
+.upload-actions { margin-top: 6px; display: grid; grid-template-columns: .75fr 1.25fr; gap: 6px; }
+.upload-actions button { min-height: 31px; border: 1px solid #e0dbd2; border-radius: 8px; background: white; color: #686259; font-size: 8px; font-weight: 700; }
+.upload-actions button:hover { border-color: var(--ink); background: #fffdf3; }
 .paste-button kbd { margin-left: 5px; padding: 2px 4px; border: 1px solid #d8d2c8; border-bottom-width: 2px; border-radius: 3px; background: #f7f5f1; font: 700 7px/1 Manrope, sans-serif; }
 
 .adjust-box { margin: -2px 0 18px; padding: 15px 14px; border: 1px solid #e5e0d8; border-radius: 12px; background: #faf9f6; }
