@@ -83,9 +83,9 @@ button { cursor: pointer; }
 .maker-contact-form textarea { min-width: 0; height: 48px; padding: 9px 10px; resize: vertical; border: 1px solid #d6d0c6; border-radius: 9px; outline: 0; background: white; font: 400 11px/1.5 Pretendard, sans-serif; }
 .maker-contact-form textarea:focus { border-color: var(--ink); box-shadow: 0 0 0 2px rgba(254,229,0,.45); }
 .maker-contact-form textarea::placeholder { color: #aaa49b; }
-.maker-contact-form button { border: 0; border-radius: 9px; background: var(--ink); color: white; font-size: 11px; font-weight: 800; }
-.maker-contact-form button:disabled { cursor: not-allowed; opacity: .35; }
-.maker-contact-form button:not(:disabled):hover { background: #37332e; }
+.maker-contact-form .gmail-compose-link { min-height: 48px; display: grid; place-items: center; padding: 7px 10px; border: 0; border-radius: 9px; background: var(--ink); color: white; font-size: 11px; font-weight: 800; line-height: 1.35; text-align: center; text-decoration: none; }
+.maker-contact-form .gmail-compose-link:hover { background: #37332e; }
+.maker-contact-form .gmail-compose-link:focus { outline: 2px solid rgba(254,229,0,.85); outline-offset: 2px; }
 .maker-shell { display: grid; grid-template-columns: 430px minmax(0, 1fr); overflow: visible; border: 1px solid #d9d4cb; border-radius: 22px; background: white; box-shadow: 0 28px 70px rgba(32,27,18,.08); }
 .control-panel { padding: 26px 30px 34px; border-right: 1px solid var(--line); border-radius: 21px 0 0 21px; background: #fff; }
 .panel-title { margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
@@ -358,7 +358,7 @@ footer a { color: var(--ink); font-weight: 700; text-underline-offset: 2px; }
   .maker-contact-compact summary { width: fit-content; }
   .maker-contact-popover { width: 100%; margin-top: 6px; position: relative; top: auto; right: auto; }
   .maker-contact-form { grid-template-columns: 1fr; }
-  .maker-contact-form button { min-height: 38px; }
+  .maker-contact-form .gmail-compose-link { min-height: 38px; }
   .quick-start ol { align-items: flex-start; flex-direction: column; }
   .quick-start li { white-space: normal; }
   .preview-copy-heading { align-items: stretch; flex-direction: column; }

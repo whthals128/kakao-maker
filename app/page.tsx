@@ -1099,24 +1099,6 @@ export default function Home() {
     setNotice("공식 규격 PNG 파일을 저장했습니다.");
   }
 
-  function sendInquiry() {
-    const message = inquiry.trim();
-    if (!message) {
-      setNotice("문의 내용을 입력해주세요.");
-      return;
-    }
-    const gmailComposeUrl = new URL("https://mail.google.com/mail/");
-    gmailComposeUrl.searchParams.set("view", "cm");
-    gmailComposeUrl.searchParams.set("fs", "1");
-    gmailComposeUrl.searchParams.set("to", "somin.jo@playd.com");
-    gmailComposeUrl.searchParams.set("su", `[Kakao Maker 문의] ${typeInfo.title}`);
-    gmailComposeUrl.searchParams.set("body", `안녕하세요. Kakao Maker 관련 문의드립니다.\n\n${message}\n\n선택한 제작 유형: ${typeInfo.title}`);
-    const gmailWindow = window.open(gmailComposeUrl.toString(), "_blank");
-    if (gmailWindow) gmailWindow.opener = null;
-    else window.location.assign(gmailComposeUrl.toString());
-    setNotice("Gmail 작성 화면을 열었습니다. 내용을 확인한 뒤 최종 발송해주세요.");
-  }
-
   const hasCopy = template === "badge"
     ? Boolean(mainCopy.trim() || subCopy.trim())
     : Boolean(mainCopy.trim() || subCopy.trim() || centerLeftSub.trim() || centerRightSub.trim());
@@ -1124,6 +1106,12 @@ export default function Home() {
   const fileTooLarge = fileBytes !== null && fileBytes > MAX_FILE_BYTES;
   const readyToDownload = complete && layoutIssues.length === 0 && fileBytes !== null && !fileTooLarge;
   const typeInfo = TYPE_COPY[template];
+  const gmailComposeUrl = new URL("https://mail.google.com/mail/");
+  gmailComposeUrl.searchParams.set("view", "cm");
+  gmailComposeUrl.searchParams.set("fs", "1");
+  gmailComposeUrl.searchParams.set("to", "somin.jo@playd.com");
+  gmailComposeUrl.searchParams.set("su", `[Kakao Maker 문의] ${typeInfo.title}`);
+  if (inquiry.trim()) gmailComposeUrl.searchParams.set("body", `안녕하세요. Kakao Maker 관련 문의드립니다.\n\n${inquiry.trim()}\n\n선택한 제작 유형: ${typeInfo.title}`);
 
   return (
     <main>
@@ -1165,11 +1153,11 @@ export default function Home() {
           <details className="maker-contact-compact">
             <summary>문의·추가 요청 <b>somin.jo@playd.com</b></summary>
             <div className="maker-contact-popover">
-              <p>문의 내용을 입력하면 받는 사람과 제목이 채워진 Gmail 작성 화면이 열립니다.</p>
+              <p>아래 링크를 누르면 일반 Gmail 작성 페이지가 새 탭으로 열립니다.</p>
               <div className="maker-contact-form">
                 <label htmlFor="maker-inquiry" className="visually-hidden">문의 내용</label>
                 <textarea id="maker-inquiry" value={inquiry} maxLength={1000} placeholder="문의 또는 추가 요청 사항을 입력해주세요." onChange={(event) => setInquiry(event.target.value)} />
-                <button type="button" onClick={sendInquiry} disabled={!inquiry.trim()}>Gmail 작성 열기</button>
+                <a className="gmail-compose-link" href={gmailComposeUrl.toString()} target="_blank" rel="noopener noreferrer">Gmail 작성 페이지 열기</a>
               </div>
             </div>
           </details>
