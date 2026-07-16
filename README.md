@@ -1,98 +1,42 @@
-# vinext-starter
+# Kakao Maker
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+카카오 비즈보드 오픈스타일 소재를 1029×258 규격으로 제작하는 웹 도구입니다.
 
-## Prerequisites
+## Live
 
-- Node.js `>=22.13.0`
+- [Kakao Maker 실행하기](https://resize-lab-kr.whthals128.chatgpt.site/)
 
-## Quick Start
+## 주요 기능
+
+- 배지 플래그형과 중앙 오브젝트형을 유형별로 제작
+- 상품 이미지 2개 업로드, 겹침 배치, 개별·동시 이동 및 확대/축소
+- 메인·서브 카피 39~51pt 조절과 좌·중앙·우 정렬
+- 중앙 오브젝트형 좌·우 메인 및 좌·우 서브 카피 독립 입력
+- 서브 카피 ON/OFF
+- 카피와 오브젝트가 허용영역을 넘으면 미리보기와 PNG에서 자동 잘림
+- 유형별 마지막 작업 자동 저장 및 복원
+- 제이에스티나 광고주체 로고 기본 적용
+- 1029×258 PNG 저장 및 300KB 용량 점검
+
+## 기본 상태
+
+앱을 처음 실행하면 제출 시점의 배지 플래그형 설정이 기본값으로 열립니다. 사용자가 변경한 내용은 브라우저에 자동 저장되며 배지 플래그형과 중앙 오브젝트형에 각각 유지됩니다.
+
+## 로컬 실행
+
+Node.js 22.13 이상이 필요합니다.
 
 ```bash
 npm install
 npm run dev
+```
+
+배포용 빌드를 확인하려면 다음 명령을 실행합니다.
+
+```bash
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+## 문의
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+문의사항 및 추가 요청 사항은 [somin.jo@playd.com](mailto:somin.jo@playd.com)으로 연락바랍니다.
