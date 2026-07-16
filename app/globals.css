@@ -81,9 +81,12 @@ button { cursor: pointer; }
 .control-panel { padding: 26px 30px 34px; border-right: 1px solid var(--line); border-radius: 21px 0 0 21px; background: #fff; }
 .panel-title { margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
 .panel-title > div { display: flex; align-items: center; gap: 9px; }
-.panel-title > div > span { padding: 5px 7px; border-radius: 5px; background: var(--yellow); font: 800 8px/1 Manrope, sans-serif; }
+.panel-title > div:first-child > span { padding: 5px 7px; border-radius: 5px; background: var(--yellow); font: 800 8px/1 Manrope, sans-serif; }
 .panel-title h3 { margin: 0; font-size: 18px; }
 .panel-title button, .adjust-heading button { border: 0; background: transparent; color: #8d877e; font-size: 9px; text-decoration: underline; text-underline-offset: 3px; }
+.panel-title .panel-actions { display: flex; align-items: flex-end; flex-direction: column; gap: 4px; }
+.panel-title .save-status { padding: 0; background: transparent; color: #24834d; font-size: 7px; font-weight: 700; white-space: nowrap; }
+.panel-title .save-status.saving { color: #9a6a17; }
 
 .field-block { padding: 19px 0; border-top: 1px solid var(--line); }
 .field-block.compact { padding-bottom: 17px; }

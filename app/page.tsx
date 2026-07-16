@@ -44,7 +44,10 @@ type Settings = {
   product2Scale: number;
   product2X: number;
   product2Y: number;
+  activeProduct: ActiveLayer;
+  groupScaleOffset: number;
   showGuides: boolean;
+  inquiry: string;
 };
 
 const EMPTY_ASSET: AssetState = { file: null, image: null, url: "" };
@@ -348,6 +351,7 @@ export default function Home() {
   const [showGuides, setShowGuides] = useState(true);
   const [notice, setNotice] = useState("");
   const [inquiry, setInquiry] = useState("");
+  const [saveStatus, setSaveStatus] = useState("자동 저장 준비 중");
   const [fileBytes, setFileBytes] = useState<number | null>(null);
   const [draftReady, setDraftReady] = useState(false);
 
@@ -486,7 +490,10 @@ export default function Home() {
           if (typeof saved.product2Scale === "number") setProduct2Scale(saved.product2Scale);
           if (typeof saved.product2X === "number") setProduct2X(saved.product2X);
           if (typeof saved.product2Y === "number") setProduct2Y(saved.product2Y);
+          if (saved.activeProduct === "product" || saved.activeProduct === "product2" || saved.activeProduct === "both") setActiveProduct(saved.activeProduct);
+          if (typeof saved.groupScaleOffset === "number") setGroupScaleOffset(saved.groupScaleOffset);
           if (typeof saved.showGuides === "boolean") setShowGuides(saved.showGuides);
+          if (typeof saved.inquiry === "string") setInquiry(saved.inquiry);
         }
         const [storedProduct, storedProduct2, storedAdvertiser] = await Promise.all([readAsset("product"), readAsset("product2"), readAsset("advertiser")]);
         const [nextProduct, nextProduct2, nextAdvertiser] = await Promise.all([
@@ -508,7 +515,10 @@ export default function Home() {
       } catch {
         setNotice("이전 작업을 불러오지 못했습니다. 새 작업은 정상적으로 진행할 수 있습니다.");
       } finally {
-        if (!cancelled) setDraftReady(true);
+        if (!cancelled) {
+          setDraftReady(true);
+          setSaveStatus("자동 저장됨");
+        }
       }
     }
     void restore();
@@ -517,16 +527,21 @@ export default function Home() {
 
   useEffect(() => {
     if (!draftReady) return;
+    const savingTimer = window.setTimeout(() => setSaveStatus("저장 중…"), 0);
     const timer = window.setTimeout(() => {
       const settings: Settings = {
         template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
         background, textColor, badgeColor, productScale, productX, productY,
-        product2Scale, product2X, product2Y, showGuides,
+        product2Scale, product2X, product2Y, activeProduct, groupScaleOffset, showGuides, inquiry,
       };
       window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      setSaveStatus(`자동 저장됨 ${new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date())}`);
     }, 350);
-    return () => window.clearTimeout(timer);
-  }, [advertiserText, background, badgeColor, badgeText, centerLeftSub, centerRightSub, draftReady, mainCopy, objectSide, product2Scale, product2X, product2Y, productScale, productX, productY, showGuides, subCopy, template, textColor]);
+    return () => {
+      window.clearTimeout(savingTimer);
+      window.clearTimeout(timer);
+    };
+  }, [activeProduct, advertiserText, background, badgeColor, badgeText, centerLeftSub, centerRightSub, draftReady, groupScaleOffset, inquiry, mainCopy, objectSide, product2Scale, product2X, product2Y, productScale, productX, productY, showGuides, subCopy, template, textColor]);
 
   function setAsset(key: AssetKey, file?: File) {
     if (!file || !file.type.startsWith("image/")) return;
@@ -538,6 +553,7 @@ export default function Home() {
       });
       await saveAsset(key, file);
       if (key === "product" || key === "product2") setActiveProduct(key);
+      setSaveStatus("자동 저장됨");
       setNotice(`${key === "advertiser" ? "광고주체 이미지" : key === "product2" ? "상품 이미지 2" : "상품 이미지 1"}를 적용했습니다.`);
     }).catch(() => setNotice("이미지 파일을 읽지 못했습니다. PNG, JPG 또는 WEBP 파일을 사용해주세요."));
   }
@@ -713,6 +729,7 @@ export default function Home() {
     setActiveProduct("product");
     setGroupScaleOffset(0);
     setShowGuides(true);
+    setInquiry("");
     setNotice("초기화했습니다.");
     window.localStorage.removeItem(SETTINGS_KEY);
     void clearAssets()
@@ -801,7 +818,7 @@ export default function Home() {
         </div>
         <div className="maker-shell">
           <aside className="control-panel">
-            <div className="panel-title"><div><span>INPUT</span><h3>소재 구성</h3></div><button type="button" onClick={reset}>전체 초기화</button></div>
+            <div className="panel-title"><div><span>INPUT</span><h3>소재 구성</h3></div><div className="panel-actions"><span className={saveStatus.startsWith("저장 중") ? "save-status saving" : "save-status"}>{saveStatus}</span><button type="button" onClick={reset}>전체 초기화</button></div></div>
 
             {template === "badge" && (
               <div className="field-block compact">
