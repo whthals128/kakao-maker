@@ -5,6 +5,7 @@ import {
   ClipboardEvent as ReactClipboardEvent,
   DragEvent,
   PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
   useRef,
@@ -20,6 +21,7 @@ const STORE_NAME = "assets";
 type TemplateType = "badge" | "center";
 type ObjectSide = "left" | "right";
 type AssetKey = "product" | "product2" | "advertiser";
+type ActiveLayer = "product" | "product2" | "both";
 type AssetState = { file: File | null; image: HTMLImageElement | null; url: string };
 type StoredAsset = { blob: Blob; name: string; type: string };
 type Settings = {
@@ -288,7 +290,7 @@ const TYPE_COPY = {
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number; layer: "product" | "product2" } | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin1X: number; origin1Y: number; origin2X: number; origin2Y: number; layer: ActiveLayer } | null>(null);
   const [template, setTemplate] = useState<TemplateType>("badge");
   const [objectSide, setObjectSide] = useState<ObjectSide>("right");
   const [product, setProduct] = useState<AssetState>(EMPTY_ASSET);
@@ -307,7 +309,8 @@ export default function Home() {
   const [product2Scale, setProduct2Scale] = useState(82);
   const [product2X, setProduct2X] = useState(62);
   const [product2Y, setProduct2Y] = useState(18);
-  const [activeProduct, setActiveProduct] = useState<"product" | "product2">("product");
+  const [activeProduct, setActiveProduct] = useState<ActiveLayer>("product");
+  const [groupScaleOffset, setGroupScaleOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [showGuides, setShowGuides] = useState(true);
   const [notice, setNotice] = useState("");
@@ -501,6 +504,8 @@ export default function Home() {
     setProduct2Scale(82);
     setProduct2X(62);
     setProduct2Y(18);
+    setActiveProduct("product");
+    setGroupScaleOffset(0);
     if (next === "center") {
       setMainCopy("쫀득쫀득 촉감의");
       setSubCopy("니니즈 필로우");
@@ -510,18 +515,55 @@ export default function Home() {
     }
   }
 
+  function zoomActive(delta: number) {
+    if (activeProduct === "product" && product.image) {
+      setProductScale((value) => Math.max(55, Math.min(180, value + delta)));
+      return;
+    }
+    if (activeProduct === "product2" && product2.image) {
+      setProduct2Scale((value) => Math.max(40, Math.min(180, value + delta)));
+      return;
+    }
+    if (activeProduct === "both" && product.image && product2.image) {
+      setProductScale((value) => Math.max(55, Math.min(180, value + delta)));
+      setProduct2Scale((value) => Math.max(40, Math.min(180, value + delta)));
+    }
+  }
+
+  function changeGroupScaleOffset(next: number) {
+    const delta = next - groupScaleOffset;
+    setProductScale((value) => Math.max(55, Math.min(180, value + delta)));
+    setProduct2Scale((value) => Math.max(40, Math.min(180, value + delta)));
+    setGroupScaleOffset(next);
+  }
+
+  function wheelObjectZoom(event: ReactWheelEvent<HTMLDivElement>) {
+    if (!product.image && !product2.image) return;
+    event.preventDefault();
+    zoomActive(event.deltaY < 0 ? 4 : -4);
+  }
+
   function startObjectDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    const layer = activeProduct === "product2" && product2.image
-      ? "product2"
-      : product.image
-        ? "product"
-        : product2.image
-          ? "product2"
-          : null;
+    const layer: ActiveLayer | null = activeProduct === "both" && product.image && product2.image
+      ? "both"
+      : activeProduct === "product2" && product2.image
+        ? "product2"
+        : product.image
+          ? "product"
+          : product2.image
+            ? "product2"
+            : null;
     if (!layer) return;
-    const originX = layer === "product" ? productX : product2X;
-    const originY = layer === "product" ? productY : product2Y;
-    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX, originY, layer };
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin1X: productX,
+      origin1Y: productY,
+      origin2X: product2X,
+      origin2Y: product2Y,
+      layer,
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
     setActiveProduct(layer);
     setIsDragging(true);
@@ -534,12 +576,13 @@ export default function Home() {
     const rect = event.currentTarget.getBoundingClientRect();
     const deltaX = (event.clientX - drag.startX) * (WIDTH / rect.width);
     const deltaY = (event.clientY - drag.startY) * (HEIGHT / rect.height);
-    if (drag.layer === "product") {
-      setProductX(Math.round(Math.max(-120, Math.min(120, drag.originX + deltaX))));
-      setProductY(Math.round(Math.max(-90, Math.min(90, drag.originY + deltaY))));
-    } else {
-      setProduct2X(Math.round(Math.max(-150, Math.min(150, drag.originX + deltaX))));
-      setProduct2Y(Math.round(Math.max(-100, Math.min(100, drag.originY + deltaY))));
+    if (drag.layer === "product" || drag.layer === "both") {
+      setProductX(Math.round(Math.max(-120, Math.min(120, drag.origin1X + deltaX))));
+      setProductY(Math.round(Math.max(-90, Math.min(90, drag.origin1Y + deltaY))));
+    }
+    if (drag.layer === "product2" || drag.layer === "both") {
+      setProduct2X(Math.round(Math.max(-150, Math.min(150, drag.origin2X + deltaX))));
+      setProduct2Y(Math.round(Math.max(-100, Math.min(100, drag.origin2Y + deltaY))));
     }
   }
 
@@ -572,6 +615,8 @@ export default function Home() {
     setProduct2Scale(82);
     setProduct2X(62);
     setProduct2Y(18);
+    setActiveProduct("product");
+    setGroupScaleOffset(0);
     setShowGuides(true);
     setNotice("초기화했습니다.");
     window.localStorage.removeItem(SETTINGS_KEY);
@@ -670,6 +715,14 @@ export default function Home() {
               <RangeField label="세로 위치" value={product2Y} min={-100} max={100} unit="px" onChange={setProduct2Y} />
             </div>
 
+            {product.image && product2.image && (
+              <div className="adjust-box group-adjust">
+                <div className="adjust-heading"><strong>두 이미지 함께 조절</strong><button type="button" onClick={() => changeGroupScaleOffset(0)}>공용 크기 초기화</button></div>
+                <p className="layer-note">두 이미지의 현재 크기 차이를 유지한 채 함께 확대·축소합니다.</p>
+                <RangeField label="함께 크기" value={groupScaleOffset} min={-40} max={40} unit="%" onChange={changeGroupScaleOffset} />
+              </div>
+            )}
+
             <div className="field-block">
               <div className="field-heading"><div><strong>{template === "center" ? "좌·우 카피" : "카피"}</strong><span>{template === "center" ? "각 1줄" : "메인 1줄 · 서브 1줄"}</span></div></div>
               <label className="text-input"><span>{template === "center" ? "좌측" : "메인"}</span><input value={mainCopy} maxLength={30} onChange={(event) => setMainCopy(event.target.value)} /></label>
@@ -702,11 +755,17 @@ export default function Home() {
             <div className="preview-title"><div><span>LIVE PREVIEW</span><h3>{typeInfo.title}</h3></div>{template === "center" && <span className="center-area-chip">실제 삽입 영역 438×258 · 50% 중앙선</span>}<label><input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> 가이드 영역</label></div>
             <div className="drag-toolbar">
               <span>미리보기에서 이동할 이미지</span>
-              <div>
+              <div className="layer-selector">
                 <button type="button" disabled={!product.image} className={activeProduct === "product" ? "active" : ""} onClick={() => setActiveProduct("product")}>이미지 1</button>
                 <button type="button" disabled={!product2.image} className={activeProduct === "product2" ? "active" : ""} onClick={() => setActiveProduct("product2")}>이미지 2</button>
+                <button type="button" disabled={!product.image || !product2.image} className={activeProduct === "both" ? "active" : ""} onClick={() => setActiveProduct("both")}>두 이미지 함께</button>
               </div>
-              <small>이미지를 선택한 뒤 가이드 영역을 드래그하세요.</small>
+              <div className="zoom-controls">
+                <button type="button" onClick={() => zoomActive(-5)} aria-label="선택 이미지 축소">−</button>
+                <b>{activeProduct === "product" ? productScale : activeProduct === "product2" ? product2Scale : `${productScale}·${product2Scale}`}%</b>
+                <button type="button" onClick={() => zoomActive(5)} aria-label="선택 이미지 확대">+</button>
+              </div>
+              <small>드래그로 이동 · 마우스 휠 또는 −/+로 확대</small>
             </div>
             <div className="preview-stage">
               <div className="creative-frame">
@@ -718,7 +777,8 @@ export default function Home() {
                   onPointerMove={moveObjectDrag}
                   onPointerUp={endObjectDrag}
                   onPointerCancel={endObjectDrag}
-                  aria-label={`${activeProduct === "product" ? "상품 이미지 1" : "상품 이미지 2"} 드래그 이동 영역`}
+                  onWheel={wheelObjectZoom}
+                  aria-label={`${activeProduct === "product" ? "상품 이미지 1" : activeProduct === "product2" ? "상품 이미지 2" : "두 상품 이미지"} 이동 및 확대 영역`}
                 />
                 {showGuides && (
                   <div className={`guide-overlay ${template} ${objectSide}`}>

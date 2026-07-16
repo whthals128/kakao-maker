@@ -92,7 +92,9 @@ button { cursor: pointer; }
 .adjust-heading { display: flex; align-items: center; justify-content: space-between; }
 .adjust-heading strong { font-size: 10px; }
 .second-layer { border-color: #d9cfa8; background: #fffdf3; }
+.group-adjust { border-color: #9fc1f2; background: #f2f7ff; }
 .layer-note { margin: 8px 0 2px; color: #8b6a11; font-size: 8px; line-height: 1.55; }
+.group-adjust .layer-note { color: #35669f; }
 .range-field { margin-top: 12px; display: block; }
 .range-field > span { display: flex; justify-content: space-between; color: #777; font-size: 8px; }
 .range-field b { color: var(--ink); font: 700 9px/1 Manrope, sans-serif; }
@@ -128,6 +130,11 @@ button { cursor: pointer; }
 .drag-toolbar button { min-width: 55px; height: 25px; border: 0; border-radius: 6px; background: transparent; color: #777; font-size: 8px; font-weight: 700; }
 .drag-toolbar button.active { background: var(--ink); color: white; }
 .drag-toolbar button:disabled { cursor: not-allowed; opacity: .35; }
+.drag-toolbar .layer-selector button:last-child { min-width: 75px; }
+.drag-toolbar .zoom-controls { margin-left: auto; align-items: center; background: #eaf2ff; }
+.drag-toolbar .zoom-controls button { min-width: 31px; color: #215fae; font-size: 16px; line-height: 1; }
+.drag-toolbar .zoom-controls button:hover { background: white; }
+.drag-toolbar .zoom-controls b { min-width: 52px; color: #215fae; text-align: center; font: 800 8px/1 Manrope, sans-serif; }
 .drag-toolbar small { margin-left: auto; color: #9b958c; font-size: 8px; }
 .preview-stage { min-height: 480px; padding: 42px 22px; display: grid; place-items: center; overflow: hidden; border-radius: 16px; background-color: #e8e5de; background-image: linear-gradient(45deg,#ddd9d1 25%,transparent 25%),linear-gradient(-45deg,#ddd9d1 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ddd9d1 75%),linear-gradient(-45deg,transparent 75%,#ddd9d1 75%); background-size: 20px 20px; background-position: 0 0,0 10px,10px -10px,-10px 0; }
 .creative-frame { width: min(100%, 746px); aspect-ratio: 933 / 258; position: relative; box-shadow: 0 24px 55px rgba(26,23,18,.2); }
