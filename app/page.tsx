@@ -21,11 +21,33 @@ const STORE_NAME = "assets";
 type TemplateType = "badge" | "center";
 type ObjectSide = "left" | "right";
 type AssetKey = "product" | "product2" | "advertiser";
+type ProductAssetKey = Exclude<AssetKey, "advertiser">;
+type StoredAssetKey = AssetKey | `${TemplateType}:${ProductAssetKey}`;
 type ActiveLayer = "product" | "product2" | "both";
 type ProductLayer = "product" | "product2";
 type Rect = { x: number; y: number; width: number; height: number };
 type AssetState = { file: File | null; image: HTMLImageElement | null; url: string };
 type StoredAsset = { blob: Blob; name: string; type: string };
+type TemplateDraft = {
+  objectSide: ObjectSide;
+  mainCopy: string;
+  subCopy: string;
+  centerLeftSub: string;
+  centerRightSub: string;
+  advertiserText: string;
+  badgeText: string;
+  background: string;
+  textColor: string;
+  badgeColor: string;
+  productScale: number;
+  productX: number;
+  productY: number;
+  product2Scale: number;
+  product2X: number;
+  product2Y: number;
+  activeProduct: ActiveLayer;
+  groupScaleOffset: number;
+};
 type Settings = {
   template: TemplateType;
   objectSide: ObjectSide;
@@ -48,6 +70,24 @@ type Settings = {
   groupScaleOffset: number;
   showGuides: boolean;
   inquiry: string;
+  templateDrafts?: Record<TemplateType, TemplateDraft>;
+};
+
+const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
+  badge: {
+    objectSide: "right", mainCopy: "니니즈 쫀득쫀득 촉감의 매력", subCopy: "오늘만 10% 추가적립",
+    centerLeftSub: "오늘만 10% 추가적립", centerRightSub: "니니즈 스페셜 필로우", advertiserText: "J.ESTINA",
+    badgeText: "10%", background: "#F5F5F5", textColor: "#4C4C4C", badgeColor: "#FF3B00",
+    productScale: 100, productX: 0, productY: 0, product2Scale: 82, product2X: 62, product2Y: 18,
+    activeProduct: "product", groupScaleOffset: 0,
+  },
+  center: {
+    objectSide: "right", mainCopy: "쫀득쫀득 촉감의", subCopy: "니니즈 필로우",
+    centerLeftSub: "오늘만 10% 추가적립", centerRightSub: "니니즈 스페셜 필로우", advertiserText: "J.ESTINA",
+    badgeText: "10%", background: "#F5F5F5", textColor: "#4C4C4C", badgeColor: "#FF3B00",
+    productScale: 100, productX: 0, productY: 0, product2Scale: 82, product2X: 62, product2Y: 18,
+    activeProduct: "product", groupScaleOffset: 0,
+  },
 };
 
 const EMPTY_ASSET: AssetState = { file: null, image: null, url: "" };
@@ -96,7 +136,7 @@ function openDatabase() {
   });
 }
 
-async function saveAsset(key: AssetKey, file: File) {
+async function saveAsset(key: StoredAssetKey, file: File) {
   const database = await openDatabase();
   await new Promise<void>((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, "readwrite");
@@ -110,7 +150,7 @@ async function saveAsset(key: AssetKey, file: File) {
   database.close();
 }
 
-async function readAsset(key: AssetKey) {
+async function readAsset(key: StoredAssetKey) {
   const database = await openDatabase();
   const result = await new Promise<StoredAsset | undefined>((resolve, reject) => {
     const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(key);
@@ -324,6 +364,14 @@ const TYPE_COPY = {
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin1X: number; origin1Y: number; origin2X: number; origin2Y: number; layer: ActiveLayer; moved: boolean; cycleOnClick: boolean } | null>(null);
+  const templateDraftsRef = useRef<Record<TemplateType, TemplateDraft>>({
+    badge: { ...DEFAULT_TEMPLATE_DRAFTS.badge },
+    center: { ...DEFAULT_TEMPLATE_DRAFTS.center },
+  });
+  const templateAssetsRef = useRef<Record<TemplateType, Record<ProductAssetKey, AssetState>>>({
+    badge: { product: EMPTY_ASSET, product2: EMPTY_ASSET },
+    center: { product: EMPTY_ASSET, product2: EMPTY_ASSET },
+  });
   const [template, setTemplate] = useState<TemplateType>("badge");
   const [objectSide, setObjectSide] = useState<ObjectSide>("right");
   const [product, setProduct] = useState<AssetState>(EMPTY_ASSET);
@@ -470,47 +518,58 @@ export default function Home() {
     let cancelled = false;
     async function restore() {
       try {
+        let restoredTemplate: TemplateType = "badge";
         const raw = window.localStorage.getItem(SETTINGS_KEY);
         if (raw) {
           const saved = JSON.parse(raw) as Partial<Settings>;
-          if (saved.template === "badge" || saved.template === "center") setTemplate(saved.template);
-          if (saved.objectSide === "left" || saved.objectSide === "right") setObjectSide(saved.objectSide);
-          if (typeof saved.mainCopy === "string") setMainCopy(saved.mainCopy);
-          if (typeof saved.subCopy === "string") setSubCopy(saved.subCopy);
-          if (typeof saved.centerLeftSub === "string") setCenterLeftSub(saved.centerLeftSub);
-          if (typeof saved.centerRightSub === "string") setCenterRightSub(saved.centerRightSub);
-          if (typeof saved.advertiserText === "string") setAdvertiserText(saved.advertiserText);
-          if (typeof saved.badgeText === "string") setBadgeText(saved.badgeText);
-          if (typeof saved.background === "string") setBackground(saved.background);
-          if (typeof saved.textColor === "string") setTextColor(saved.textColor);
-          if (typeof saved.badgeColor === "string") setBadgeColor(saved.badgeColor);
-          if (typeof saved.productScale === "number") setProductScale(saved.productScale);
-          if (typeof saved.productX === "number") setProductX(saved.productX);
-          if (typeof saved.productY === "number") setProductY(saved.productY);
-          if (typeof saved.product2Scale === "number") setProduct2Scale(saved.product2Scale);
-          if (typeof saved.product2X === "number") setProduct2X(saved.product2X);
-          if (typeof saved.product2Y === "number") setProduct2Y(saved.product2Y);
-          if (saved.activeProduct === "product" || saved.activeProduct === "product2" || saved.activeProduct === "both") setActiveProduct(saved.activeProduct);
-          if (typeof saved.groupScaleOffset === "number") setGroupScaleOffset(saved.groupScaleOffset);
+          const savedTemplate: TemplateType = saved.template === "center" ? "center" : "badge";
+          restoredTemplate = savedTemplate;
+          if (saved.templateDrafts?.badge && saved.templateDrafts?.center) {
+            templateDraftsRef.current = {
+              badge: { ...DEFAULT_TEMPLATE_DRAFTS.badge, ...saved.templateDrafts.badge },
+              center: { ...DEFAULT_TEMPLATE_DRAFTS.center, ...saved.templateDrafts.center },
+            };
+          } else {
+            templateDraftsRef.current[savedTemplate] = {
+              ...DEFAULT_TEMPLATE_DRAFTS[savedTemplate],
+              ...saved,
+            } as TemplateDraft;
+          }
+          setTemplate(savedTemplate);
+          applyTemplateDraft(templateDraftsRef.current[savedTemplate]);
           if (typeof saved.showGuides === "boolean") setShowGuides(saved.showGuides);
           if (typeof saved.inquiry === "string") setInquiry(saved.inquiry);
         }
-        const [storedProduct, storedProduct2, storedAdvertiser] = await Promise.all([readAsset("product"), readAsset("product2"), readAsset("advertiser")]);
-        const [nextProduct, nextProduct2, nextAdvertiser] = await Promise.all([
-          storedProduct ? prepareAsset(new File([storedProduct.blob], storedProduct.name, { type: storedProduct.type })) : null,
-          storedProduct2 ? prepareAsset(new File([storedProduct2.blob], storedProduct2.name, { type: storedProduct2.type })) : null,
+        const [badgeProduct, badgeProduct2, centerProduct, centerProduct2, legacyProduct, legacyProduct2, storedAdvertiser] = await Promise.all([
+          readAsset("badge:product"), readAsset("badge:product2"), readAsset("center:product"), readAsset("center:product2"),
+          readAsset("product"), readAsset("product2"), readAsset("advertiser"),
+        ]);
+        const prepareStored = (stored?: StoredAsset) => stored
+          ? prepareAsset(new File([stored.blob], stored.name, { type: stored.type }))
+          : Promise.resolve(null);
+        const [nextBadgeProduct, nextBadgeProduct2, nextCenterProduct, nextCenterProduct2, nextAdvertiser] = await Promise.all([
+          prepareStored(badgeProduct ?? (restoredTemplate === "badge" ? legacyProduct : undefined)),
+          prepareStored(badgeProduct2 ?? (restoredTemplate === "badge" ? legacyProduct2 : undefined)),
+          prepareStored(centerProduct ?? (restoredTemplate === "center" ? legacyProduct : undefined)),
+          prepareStored(centerProduct2 ?? (restoredTemplate === "center" ? legacyProduct2 : undefined)),
           storedAdvertiser
             ? prepareAsset(new File([storedAdvertiser.blob], storedAdvertiser.name, { type: storedAdvertiser.type }))
             : preparePublicAsset("/jestina-advertiser.png"),
         ]);
         if (cancelled) {
-          if (nextProduct) revokeAssetUrl(nextProduct);
-          if (nextProduct2) revokeAssetUrl(nextProduct2);
+          if (nextBadgeProduct) revokeAssetUrl(nextBadgeProduct);
+          if (nextBadgeProduct2) revokeAssetUrl(nextBadgeProduct2);
+          if (nextCenterProduct) revokeAssetUrl(nextCenterProduct);
+          if (nextCenterProduct2) revokeAssetUrl(nextCenterProduct2);
           if (nextAdvertiser) revokeAssetUrl(nextAdvertiser);
           return;
         }
-        if (nextProduct) setProduct(nextProduct);
-        if (nextProduct2) setProduct2(nextProduct2);
+        templateAssetsRef.current = {
+          badge: { product: nextBadgeProduct ?? EMPTY_ASSET, product2: nextBadgeProduct2 ?? EMPTY_ASSET },
+          center: { product: nextCenterProduct ?? EMPTY_ASSET, product2: nextCenterProduct2 ?? EMPTY_ASSET },
+        };
+        setProduct(templateAssetsRef.current[restoredTemplate].product);
+        setProduct2(templateAssetsRef.current[restoredTemplate].product2);
         if (nextAdvertiser) setAdvertiser(nextAdvertiser);
       } catch {
         setNotice("이전 작업을 불러오지 못했습니다. 새 작업은 정상적으로 진행할 수 있습니다.");
@@ -529,10 +588,20 @@ export default function Home() {
     if (!draftReady) return;
     const savingTimer = window.setTimeout(() => setSaveStatus("저장 중…"), 0);
     const timer = window.setTimeout(() => {
+      const currentDraft: TemplateDraft = {
+        objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
+        background, textColor, badgeColor, productScale, productX, productY,
+        product2Scale, product2X, product2Y, activeProduct, groupScaleOffset,
+      };
+      templateDraftsRef.current[template] = currentDraft;
       const settings: Settings = {
         template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
         background, textColor, badgeColor, productScale, productX, productY,
         product2Scale, product2X, product2Y, activeProduct, groupScaleOffset, showGuides, inquiry,
+        templateDrafts: {
+          badge: { ...templateDraftsRef.current.badge },
+          center: { ...templateDraftsRef.current.center },
+        },
       };
       window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
       setSaveStatus(`자동 저장됨 ${new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date())}`);
@@ -546,13 +615,22 @@ export default function Home() {
   function setAsset(key: AssetKey, file?: File) {
     if (!file || !file.type.startsWith("image/")) return;
     void prepareAsset(file).then(async (next) => {
-      const setter = key === "product" ? setProduct : key === "product2" ? setProduct2 : setAdvertiser;
-      setter((current) => {
-        revokeAssetUrl(current);
-        return next;
-      });
-      await saveAsset(key, file);
-      if (key === "product" || key === "product2") setActiveProduct(key);
+      if (key === "advertiser") {
+        setAdvertiser((current) => {
+          revokeAssetUrl(current);
+          return next;
+        });
+        await saveAsset("advertiser", file);
+      } else {
+        const setter = key === "product" ? setProduct : setProduct2;
+        setter((current) => {
+          revokeAssetUrl(current);
+          return next;
+        });
+        templateAssetsRef.current[template][key] = next;
+        await saveAsset(`${template}:${key}`, file);
+        setActiveProduct(key);
+      }
       setSaveStatus("자동 저장됨");
       setNotice(`${key === "advertiser" ? "광고주체 이미지" : key === "product2" ? "상품 이미지 2" : "상품 이미지 1"}를 적용했습니다.`);
     }).catch(() => setNotice("이미지 파일을 읽지 못했습니다. PNG, JPG 또는 WEBP 파일을 사용해주세요."));
@@ -578,23 +656,44 @@ export default function Home() {
     }
   }
 
+  function currentTemplateDraft(): TemplateDraft {
+    return {
+      objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
+      background, textColor, badgeColor, productScale, productX, productY,
+      product2Scale, product2X, product2Y, activeProduct, groupScaleOffset,
+    };
+  }
+
+  function applyTemplateDraft(draft: TemplateDraft) {
+    setObjectSide(draft.objectSide);
+    setMainCopy(draft.mainCopy);
+    setSubCopy(draft.subCopy);
+    setCenterLeftSub(draft.centerLeftSub);
+    setCenterRightSub(draft.centerRightSub);
+    setAdvertiserText(draft.advertiserText);
+    setBadgeText(draft.badgeText);
+    setBackground(draft.background);
+    setTextColor(draft.textColor);
+    setBadgeColor(draft.badgeColor);
+    setProductScale(draft.productScale);
+    setProductX(draft.productX);
+    setProductY(draft.productY);
+    setProduct2Scale(draft.product2Scale);
+    setProduct2X(draft.product2X);
+    setProduct2Y(draft.product2Y);
+    setActiveProduct(draft.activeProduct);
+    setGroupScaleOffset(draft.groupScaleOffset);
+  }
+
   function changeTemplate(next: TemplateType) {
+    if (next === template) return;
+    templateDraftsRef.current[template] = currentTemplateDraft();
+    templateAssetsRef.current[template] = { product, product2 };
     setTemplate(next);
-    setProductScale(100);
-    setProductX(0);
-    setProductY(0);
-    setProduct2Scale(82);
-    setProduct2X(62);
-    setProduct2Y(18);
-    setActiveProduct("product");
-    setGroupScaleOffset(0);
-    if (next === "center") {
-      setMainCopy("쫀득쫀득 촉감의");
-      setSubCopy("니니즈 필로우");
-    } else {
-      setMainCopy("니니즈 쫀득쫀득 촉감의 매력");
-      setSubCopy("오늘만 10% 추가적립");
-    }
+    applyTemplateDraft(templateDraftsRef.current[next]);
+    setProduct(templateAssetsRef.current[next].product);
+    setProduct2(templateAssetsRef.current[next].product2);
+    setNotice(`${TYPE_COPY[next].title}의 마지막 작업을 불러왔습니다.`);
   }
 
   function zoomActive(delta: number) {
@@ -703,12 +802,20 @@ export default function Home() {
   }
 
   function reset() {
-    revokeAssetUrl(product);
-    revokeAssetUrl(product2);
+    const productAssets = [product, product2, ...Object.values(templateAssetsRef.current).flatMap((assets) => [assets.product, assets.product2])];
+    new Set(productAssets.map((asset) => asset.url).filter((url) => url.startsWith("blob:"))).forEach((url) => URL.revokeObjectURL(url));
     revokeAssetUrl(advertiser);
     setProduct(EMPTY_ASSET);
     setProduct2(EMPTY_ASSET);
     setAdvertiser(EMPTY_ASSET);
+    templateDraftsRef.current = {
+      badge: { ...DEFAULT_TEMPLATE_DRAFTS.badge },
+      center: { ...DEFAULT_TEMPLATE_DRAFTS.center },
+    };
+    templateAssetsRef.current = {
+      badge: { product: EMPTY_ASSET, product2: EMPTY_ASSET },
+      center: { product: EMPTY_ASSET, product2: EMPTY_ASSET },
+    };
     setTemplate("badge");
     setObjectSide("right");
     setMainCopy("니니즈 쫀득쫀득 촉감의 매력");
@@ -807,15 +914,19 @@ export default function Home() {
       </section>
 
       <section className="maker-section" aria-labelledby="maker-title">
-        <div className="section-heading"><span>STEP 02</span><div><h2 id="maker-title">{typeInfo.title} 제작</h2><p>{typeInfo.summary}</p></div></div>
-        <div className="maker-contact">
-          <div className="maker-contact-copy"><span>CONTACT</span><div><strong>문의사항 및 추가 요청 사항은 <a href="mailto:somin.jo@playd.com">somin.jo@playd.com</a>으로 연락바랍니다.</strong><small>문의 내용을 입력하고 발송을 누르면 수신인과 내용이 작성된 메일 앱이 열립니다.</small></div></div>
-          <div className="maker-contact-form">
-            <label htmlFor="maker-inquiry" className="visually-hidden">문의 내용</label>
-            <textarea id="maker-inquiry" value={inquiry} maxLength={1000} placeholder="문의 또는 추가 요청 사항을 입력해주세요." onChange={(event) => setInquiry(event.target.value)} />
-            <button type="button" onClick={sendInquiry} disabled={!inquiry.trim()}>문의 발송</button>
+        <div className="section-heading maker-heading"><span>STEP 02</span><div><h2 id="maker-title">{typeInfo.title} 제작</h2><p>{typeInfo.summary}</p></div>
+          <details className="maker-contact-compact">
+            <summary>문의·추가 요청 <b>somin.jo@playd.com</b></summary>
+            <div className="maker-contact-popover">
+              <p>문의사항 및 추가 요청 사항은 <a href="mailto:somin.jo@playd.com">somin.jo@playd.com</a>으로 연락바랍니다.</p>
+              <div className="maker-contact-form">
+                <label htmlFor="maker-inquiry" className="visually-hidden">문의 내용</label>
+                <textarea id="maker-inquiry" value={inquiry} maxLength={1000} placeholder="문의 또는 추가 요청 사항을 입력해주세요." onChange={(event) => setInquiry(event.target.value)} />
+                <button type="button" onClick={sendInquiry} disabled={!inquiry.trim()}>문의 발송</button>
+              </div>
+            </div>
+          </details>
           </div>
-        </div>
         <div className="maker-shell">
           <aside className="control-panel">
             <div className="panel-title"><div><span>INPUT</span><h3>소재 구성</h3></div><div className="panel-actions"><span className={saveStatus.startsWith("저장 중") ? "save-status saving" : "save-status"}>{saveStatus}</span><button type="button" onClick={reset}>전체 초기화</button></div></div>
