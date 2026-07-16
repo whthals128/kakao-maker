@@ -1179,8 +1179,8 @@ export default function Home() {
             <div className="panel-title"><div><span>INPUT</span><h3>소재 구성</h3></div><div className="panel-actions"><span className={saveStatus.startsWith("저장 중") ? "save-status saving" : "save-status"}>{saveStatus}</span><button type="button" onClick={reset}>전체 초기화</button></div></div>
             <div className="quick-start" role="note">
               <b>처음이라면 이 순서로 진행하세요</b>
-              <ol><li>상품 이미지 등록</li><li>오른쪽에서 카피 입력</li><li>PNG 소재 저장</li></ol>
-              <p>두 이미지 겹침이나 개별 크기·위치 조정이 필요할 때만 아래 <strong>상세 이미지 조정</strong>을 열어주세요.</p>
+              <ol><li>상품 이미지 등록</li><li>오른쪽에서 디자인 세부 조정</li><li>PNG 소재 저장</li></ol>
+              <p>두 이미지 겹침이나 개별 크기·위치 조정은 오른쪽 <strong>디자인 세부 조정</strong>에서 진행해주세요.</p>
             </div>
 
             {template === "badge" && (
@@ -1194,32 +1194,10 @@ export default function Home() {
             )}
 
             <UploadField label="상품 이미지" hint="먼저 등록해주세요 · 투명 배경 PNG 권장" asset={product} assetKey="product" onFile={setAsset} onPaste={pasteAsset} />
-            <details className="advanced-image-settings">
-              <summary><span><b>상세 이미지 조정</b><small>겹침 · 개별 크기 · 위치</small></span></summary>
-              <div className="advanced-image-content">
-                <div className="adjust-box">
-                  <div className="adjust-heading"><strong>기본 이미지 조절</strong><button type="button" onClick={() => { setProductScale(100); setProductX(0); setProductY(0); }}>조절값 초기화</button></div>
-                  <RangeField label="크기" value={productScale} min={55} max={180} unit="%" onChange={setProductScale} />
-                  <RangeField label="가로 위치" value={productX} min={-120} max={120} unit="px" onChange={setProductX} />
-                  <RangeField label="세로 위치" value={productY} min={-90} max={90} unit="px" onChange={setProductY} />
-                </div>
-
+            <details className="secondary-image-upload">
+              <summary><span>추가 이미지 등록</span><small>선택</small></summary>
+              <div className="secondary-image-content">
                 <UploadField label="추가 이미지" hint="선택 입력 · 기본 이미지 위에 배치" asset={product2} assetKey="product2" onFile={setAsset} onPaste={pasteAsset} />
-                <div className="adjust-box second-layer">
-                  <div className="adjust-heading"><strong>추가 이미지 조절</strong><button type="button" onClick={() => { setProduct2Scale(82); setProduct2X(62); setProduct2Y(18); }}>조절값 초기화</button></div>
-                  <p className="layer-note">추가 이미지는 기본 이미지 위에 그려져 겹침 구성을 만들 수 있습니다.</p>
-                  <RangeField label="크기" value={product2Scale} min={40} max={180} unit="%" onChange={setProduct2Scale} />
-                  <RangeField label="가로 위치" value={product2X} min={-150} max={150} unit="px" onChange={setProduct2X} />
-                  <RangeField label="세로 위치" value={product2Y} min={-100} max={100} unit="px" onChange={setProduct2Y} />
-                </div>
-
-                {product.image && product2.image && (
-                  <div className="adjust-box group-adjust">
-                    <div className="adjust-heading"><strong>두 이미지 함께 조절</strong><button type="button" onClick={() => changeGroupScaleOffset(0)}>공용 크기 초기화</button></div>
-                    <p className="layer-note">두 이미지의 현재 크기 차이를 유지한 채 함께 확대·축소합니다.</p>
-                    <RangeField label="함께 크기" value={groupScaleOffset} min={-40} max={40} unit="%" onChange={changeGroupScaleOffset} />
-                  </div>
-                )}
               </div>
             </details>
 
@@ -1271,8 +1249,8 @@ export default function Home() {
                 )}
               </div>
             </div>
-            <details className="advanced-preview-settings">
-              <summary>미리보기에서 이미지 위치·크기 상세 조정</summary>
+            <details className="advanced-preview-settings" open>
+              <summary><span>디자인 세부 조정</span><small>이미지 위치 · 크기</small></summary>
               <div className="drag-toolbar">
                 <span>조정할 이미지</span>
                 <div className="layer-selector">
@@ -1286,6 +1264,41 @@ export default function Home() {
                   <button type="button" onClick={() => zoomActive(5)} aria-label="선택 이미지 확대">+</button>
                 </div>
                 <small>이미지를 클릭해 선택 · 겹친 곳은 반복 클릭 · 드래그로 이동</small>
+              </div>
+              <div className="preview-adjust-controls">
+                {activeProduct === "product" && product.image && (
+                  <div className="preview-adjust-box">
+                    <div className="preview-adjust-heading"><strong>기본 이미지 정밀 조정</strong><button type="button" onClick={() => { setProductScale(100); setProductX(0); setProductY(0); }}>조절값 초기화</button></div>
+                    <div className="preview-adjust-grid">
+                      <RangeField label="크기" value={productScale} min={55} max={180} unit="%" onChange={setProductScale} />
+                      <RangeField label="가로 위치" value={productX} min={-120} max={120} unit="px" onChange={setProductX} />
+                      <RangeField label="세로 위치" value={productY} min={-90} max={90} unit="px" onChange={setProductY} />
+                    </div>
+                  </div>
+                )}
+                {activeProduct === "product2" && product2.image && (
+                  <div className="preview-adjust-box">
+                    <div className="preview-adjust-heading"><strong>추가 이미지 정밀 조정</strong><button type="button" onClick={() => { setProduct2Scale(82); setProduct2X(62); setProduct2Y(18); }}>조절값 초기화</button></div>
+                    <p className="layer-note">추가 이미지는 기본 이미지 위에 그려져 겹침 구성을 만들 수 있습니다.</p>
+                    <div className="preview-adjust-grid">
+                      <RangeField label="크기" value={product2Scale} min={40} max={180} unit="%" onChange={setProduct2Scale} />
+                      <RangeField label="가로 위치" value={product2X} min={-150} max={150} unit="px" onChange={setProduct2X} />
+                      <RangeField label="세로 위치" value={product2Y} min={-100} max={100} unit="px" onChange={setProduct2Y} />
+                    </div>
+                  </div>
+                )}
+                {activeProduct === "both" && product.image && product2.image && (
+                  <div className="preview-adjust-box">
+                    <div className="preview-adjust-heading"><strong>두 이미지 함께 조정</strong><button type="button" onClick={() => changeGroupScaleOffset(0)}>공용 크기 초기화</button></div>
+                    <p className="layer-note">두 이미지의 현재 크기 차이를 유지한 채 함께 확대·축소합니다.</p>
+                    <div className="preview-adjust-grid single">
+                      <RangeField label="함께 크기" value={groupScaleOffset} min={-40} max={40} unit="%" onChange={changeGroupScaleOffset} />
+                    </div>
+                  </div>
+                )}
+                {((activeProduct === "product" && !product.image) || (activeProduct === "product2" && !product2.image) || (activeProduct === "both" && (!product.image || !product2.image))) && (
+                  <p className="preview-adjust-empty">왼쪽에서 상품 이미지를 먼저 등록해주세요.</p>
+                )}
               </div>
             </details>
             <div className="preview-stage">
