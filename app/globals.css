@@ -79,7 +79,7 @@ button { cursor: pointer; }
 .maker-contact-popover { width: min(460px, 80vw); padding: 12px; position: absolute; top: calc(100% + 7px); right: 0; border: 1px solid #d9d4cb; border-radius: 11px; background: #fffbe3; box-shadow: 0 16px 36px rgba(32,27,18,.16); }
 .maker-contact-popover p { margin: 0 0 8px; color: #6f695f; font-size: 10px; }
 .maker-contact-popover a { color: #215fae; font-weight: 700; }
-.maker-contact-form { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 82px; gap: 7px; }
+.maker-contact-form { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 7px; }
 .maker-contact-form textarea { min-width: 0; height: 48px; padding: 9px 10px; resize: vertical; border: 1px solid #d6d0c6; border-radius: 9px; outline: 0; background: white; font: 400 11px/1.5 Pretendard, sans-serif; }
 .maker-contact-form textarea:focus { border-color: var(--ink); box-shadow: 0 0 0 2px rgba(254,229,0,.45); }
 .maker-contact-form textarea::placeholder { color: #aaa49b; }

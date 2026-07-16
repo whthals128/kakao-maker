@@ -1105,10 +1105,16 @@ export default function Home() {
       setNotice("문의 내용을 입력해주세요.");
       return;
     }
-    const subject = encodeURIComponent(`[Kakao Maker 문의] ${typeInfo.title}`);
-    const body = encodeURIComponent(`안녕하세요. Kakao Maker 관련 문의드립니다.\n\n${message}\n\n선택한 제작 유형: ${typeInfo.title}`);
-    window.location.href = `mailto:somin.jo@playd.com?subject=${subject}&body=${body}`;
-    setNotice("메일 앱을 열었습니다. 내용을 확인한 뒤 최종 발송해주세요.");
+    const gmailComposeUrl = new URL("https://mail.google.com/mail/");
+    gmailComposeUrl.searchParams.set("view", "cm");
+    gmailComposeUrl.searchParams.set("fs", "1");
+    gmailComposeUrl.searchParams.set("to", "somin.jo@playd.com");
+    gmailComposeUrl.searchParams.set("su", `[Kakao Maker 문의] ${typeInfo.title}`);
+    gmailComposeUrl.searchParams.set("body", `안녕하세요. Kakao Maker 관련 문의드립니다.\n\n${message}\n\n선택한 제작 유형: ${typeInfo.title}`);
+    const gmailWindow = window.open(gmailComposeUrl.toString(), "_blank");
+    if (gmailWindow) gmailWindow.opener = null;
+    else window.location.assign(gmailComposeUrl.toString());
+    setNotice("Gmail 작성 화면을 열었습니다. 내용을 확인한 뒤 최종 발송해주세요.");
   }
 
   const hasCopy = template === "badge"
@@ -1159,11 +1165,11 @@ export default function Home() {
           <details className="maker-contact-compact">
             <summary>문의·추가 요청 <b>somin.jo@playd.com</b></summary>
             <div className="maker-contact-popover">
-              <p>문의사항 및 추가 요청 사항은 <a href="mailto:somin.jo@playd.com">somin.jo@playd.com</a>으로 연락바랍니다.</p>
+              <p>문의 내용을 입력하면 받는 사람과 제목이 채워진 Gmail 작성 화면이 열립니다.</p>
               <div className="maker-contact-form">
                 <label htmlFor="maker-inquiry" className="visually-hidden">문의 내용</label>
                 <textarea id="maker-inquiry" value={inquiry} maxLength={1000} placeholder="문의 또는 추가 요청 사항을 입력해주세요." onChange={(event) => setInquiry(event.target.value)} />
-                <button type="button" onClick={sendInquiry} disabled={!inquiry.trim()}>문의 발송</button>
+                <button type="button" onClick={sendInquiry} disabled={!inquiry.trim()}>Gmail 작성 열기</button>
               </div>
             </div>
           </details>
