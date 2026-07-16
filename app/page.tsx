@@ -21,8 +21,7 @@ const MIN_COPY_OBJECT_GAP = 33;
 const MAX_FILE_BYTES = 300 * 1024;
 const MAIN_COPY_COLOR = "#4C4C4C";
 const SUB_COPY_COLOR = "#777777";
-const MAIN_COPY_MAX_SIZE = 43;
-const MAIN_COPY_MIN_SIZE = 39;
+const MAIN_COPY_SIZE = 48;
 const SUB_COPY_SIZE = 39;
 const SETTINGS_KEY = "kakao-maker:settings:v1";
 const DB_NAME = "kakao-maker-assets";
@@ -193,23 +192,6 @@ async function clearAssets() {
   database.close();
 }
 
-function fitFont(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  preferred: number,
-  weight: 400 | 700 = 700,
-  minimum = MAIN_COPY_MIN_SIZE,
-) {
-  let size = preferred;
-  while (size > minimum) {
-    ctx.font = `${weight} ${size}px Pretendard, "Noto Sans KR", sans-serif`;
-    if (ctx.measureText(text).width <= maxWidth) break;
-    size -= 1;
-  }
-  return size;
-}
-
 function getProductBox(template: TemplateType, objectSide: ObjectSide): Rect {
   if (template === "center") {
     return { x: Math.round((WIDTH - OBJECT_MAX_WIDTH) / 2), y: 0, width: OBJECT_MAX_WIDTH, height: HEIGHT };
@@ -235,9 +217,8 @@ function getCopyLines(
     const maxWidth = objectSide === "right"
       ? productBox.x - MIN_COPY_OBJECT_GAP - x
       : x - (productBox.x + productBox.width + MIN_COPY_OBJECT_GAP);
-    const mainSize = fitFont(ctx, mainCopy, maxWidth, MAIN_COPY_MAX_SIZE, 700);
     return [
-      { label: "메인카피", text: mainCopy.trim(), x, baseline: 118, maxWidth, align, size: mainSize, weight: 700, color: MAIN_COPY_COLOR },
+      { label: "메인카피", text: mainCopy.trim(), x, baseline: 118, maxWidth, align, size: MAIN_COPY_SIZE, weight: 700, color: MAIN_COPY_COLOR },
       { label: "서브카피", text: subCopy.trim(), x, baseline: 166, maxWidth, align, size: SUB_COPY_SIZE, weight: 400, color: SUB_COPY_COLOR },
     ] satisfies CopyLine[];
   }
@@ -250,7 +231,7 @@ function getCopyLines(
   return [
     {
       label: "좌측 메인카피", text: mainCopy.trim(), x: leftX, baseline: 118, maxWidth: leftWidth, align: "left",
-      size: fitFont(ctx, mainCopy, leftWidth, MAIN_COPY_MAX_SIZE, 700), weight: 700, color: MAIN_COPY_COLOR,
+      size: MAIN_COPY_SIZE, weight: 700, color: MAIN_COPY_COLOR,
     },
     {
       label: "좌측 서브카피", text: centerLeftSub.trim(), x: leftX, baseline: 166, maxWidth: leftWidth, align: "left",
@@ -258,7 +239,7 @@ function getCopyLines(
     },
     {
       label: "우측 메인카피", text: subCopy.trim(), x: rightX, baseline: 118, maxWidth: rightWidth, align: "right",
-      size: fitFont(ctx, subCopy, rightWidth, MAIN_COPY_MAX_SIZE, 700), weight: 700, color: MAIN_COPY_COLOR,
+      size: MAIN_COPY_SIZE, weight: 700, color: MAIN_COPY_COLOR,
     },
     {
       label: "우측 서브카피", text: centerRightSub.trim(), x: rightX, baseline: 166, maxWidth: rightWidth, align: "right",
@@ -628,7 +609,7 @@ export default function Home() {
       if (!line.text) continue;
       const lineRect = measureCopyLine(ctx, line);
       if (lineRect.width > line.maxWidth + .5 || !containsRect(COPY_AREA, lineRect)) {
-        issues.push(`${line.label}가 1줄 허용영역을 벗어납니다. 문구를 줄여 39pt 이상으로 맞춰주세요.`);
+        issues.push(`${line.label}가 1줄 허용영역을 벗어납니다. 현재 권장 기본값(메인 48pt·서브 39pt)에 맞게 문구를 줄여주세요.`);
       }
       if (combinedRect && horizontalGap(lineRect, combinedRect) < MIN_COPY_OBJECT_GAP) spacingIssue = true;
     }
@@ -661,7 +642,7 @@ export default function Home() {
     let cancelled = false;
     Promise.all([
       document.fonts.load("400 39px Pretendard"),
-      document.fonts.load("700 43px Pretendard"),
+      document.fonts.load("700 48px Pretendard"),
       document.fonts.load("800 26px Pretendard"),
     ]).finally(() => {
       if (!cancelled) setFontsReady(true);
@@ -1158,10 +1139,10 @@ export default function Home() {
             </div>
 
             <div className="field-block compact">
-              <div className="field-heading"><div><strong>색상</strong><span>카피 컬러는 공식값으로 고정됩니다.</span></div></div>
+              <div className="field-heading"><div><strong>색상</strong><span>카피 컬러는 메이커 권장값으로 적용됩니다.</span></div></div>
               <div className="color-grid compliant-colors">
                 <label><span>배경</span><div><input type="color" value={bg} onChange={(event) => setBackground(event.target.value)} /><input value={background} onChange={(event) => setBackground(event.target.value)} /></div></label>
-                <div className="locked-copy-colors"><span>카피 고정</span><b><i style={{ background: MAIN_COPY_COLOR }} />메인 {MAIN_COPY_COLOR}</b><b><i style={{ background: SUB_COPY_COLOR }} />서브 {SUB_COPY_COLOR}</b></div>
+                <div className="locked-copy-colors"><span>카피 기본</span><b><i style={{ background: MAIN_COPY_COLOR }} />메인 {MAIN_COPY_COLOR}</b><b><i style={{ background: SUB_COPY_COLOR }} />서브 {SUB_COPY_COLOR}</b></div>
               </div>
             </div>
           </aside>
@@ -1169,13 +1150,13 @@ export default function Home() {
           <div className="preview-panel">
             <div className="preview-title"><div><span>LIVE PREVIEW</span><h3>{typeInfo.title}</h3></div>{template === "center" && <span className="center-area-chip">좌측 카피 · 중앙 오브젝트 · 우측 카피</span>}<label><input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> 가이드 영역</label></div>
             <div className="preview-copy-editor">
-              <div className="preview-copy-heading"><strong>카피 바로 입력</strong><span>글자 수 제한 없음 · 1줄, 39pt 이상, 오브젝트 간격 33px 자동 점검</span></div>
+              <div className="preview-copy-heading"><strong>카피 바로 입력</strong><span>{template === "center" ? "권장 기본값 메인 48pt · 서브 39pt · 좌우 동일 스타일" : "권장 기본값 메인 48pt · 서브 39pt · 각 1줄"}</span></div>
               <div className={`preview-copy-grid ${template}`}>
                 {template === "center" ? (
                   <>
                     <label><span>좌측 메인</span><input value={mainCopy} onChange={(event) => setMainCopy(event.target.value)} /></label>
-                    <label><span>좌측 서브 <em>선택</em></span><input value={centerLeftSub} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterLeftSub(event.target.value)} /></label>
                     <label><span>우측 메인</span><input value={subCopy} onChange={(event) => setSubCopy(event.target.value)} /></label>
+                    <label><span>좌측 서브 <em>선택</em></span><input value={centerLeftSub} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterLeftSub(event.target.value)} /></label>
                     <label><span>우측 서브 <em>선택</em></span><input value={centerRightSub} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterRightSub(event.target.value)} /></label>
                   </>
                 ) : (
@@ -1265,7 +1246,7 @@ export default function Home() {
         <div className="section-heading light"><span>GUIDE</span><div><h2 id="guide-title">{typeInfo.title} 제작 가이드</h2><p>현재 선택한 유형에 적용되는 핵심 심사 기준입니다.</p></div></div>
         <div className="guide-cards">
           <article><span>01</span><h3>광고주체 표기</h3>{template === "badge" ? <ul><li>기존 오브젝트 영역 안에서 반드시 표기합니다.</li><li>오브젝트 좌·우 정렬에 맞춰 하단 끝에 배치합니다.</li><li>카피·오브젝트의 가독성을 침범하지 않는 크기로 구성합니다.</li></ul> : <ul><li>중앙 오브젝트형에 한해 카피 영역 내 표기가 허용됩니다.</li><li>지정 영역 좌측 최상단 또는 우측 최상단 정렬만 가능합니다.</li><li>영역 내 자유 배치나 카피·오브젝트와의 밀착은 불가합니다.</li></ul>}</article>
-          <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>메인·서브 카피는 각각 최대 1줄입니다.</li><li>메인 Pretendard Bold 39~51pt, #4C4C4C 고정입니다.</li><li>서브 Pretendard Regular 39~51pt, #777777을 적용합니다.</li><li>배지 플래그는 1어절이며 %, !, + 외 특수기호는 불가합니다.</li></ul> : <ul><li>좌·우 메인과 선택 서브는 각각 최대 1줄입니다.</li><li>메인 Pretendard Bold 39~51pt, #4C4C4C 고정입니다.</li><li>서브 Pretendard Regular 39~51pt, #777777을 적용합니다.</li><li>글자 수 제한 대신 1줄 허용영역 충족 여부로 점검합니다.</li></ul>}</article>
+          <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>오픈스타일 가이드에는 고정된 pt 범위가 별도로 없습니다.</li><li>메이커 권장 기본값은 메인 Pretendard Bold 48pt, #4C4C4C입니다.</li><li>서브 권장 기본값은 Pretendard Regular 39pt, #777777입니다.</li><li>배지 플래그는 1어절이며 %, !, + 외 특수기호는 불가합니다.</li></ul> : <ul><li>오픈스타일 가이드에는 고정된 pt 범위가 별도로 없습니다.</li><li>메이커 권장 기본값은 메인 Pretendard Bold 48pt, 서브 Regular 39pt입니다.</li><li>같은 카피 유형은 좌우 모두 크기·굵기·색상을 동일하게 적용합니다.</li><li>각 카피는 영역 안에서 오브젝트와 균형 있게 구성합니다.</li></ul>}</article>
           <article><span>03</span><h3>오브젝트·출력 가이드</h3>{template === "badge" ? <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트는 좌측 또는 우측에 두며 중앙 배열은 불가합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>카피와 오브젝트 사이 최소 33px을 확보합니다.</li></ul> : <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트 그룹을 소재 중앙 최대영역 안에 배치합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>좌우 카피와 오브젝트 사이 최소 33px을 확보합니다.</li></ul>}</article>
         </div>
         <p className="review-note"><b>심사 유의사항</b> PNG-24/32, 300KB 이하로 등록해야 합니다. 본 완화 가이드는 카카오 제공 PSD 템플릿 사용을 전제로 하므로 최종 집행 전 PSD 템플릿과 모먼트 에셋 기준을 함께 확인하세요.</p>
