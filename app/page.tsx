@@ -347,6 +347,7 @@ export default function Home() {
   const [fontsReady, setFontsReady] = useState(false);
   const [showGuides, setShowGuides] = useState(true);
   const [notice, setNotice] = useState("");
+  const [inquiry, setInquiry] = useState("");
   const [fileBytes, setFileBytes] = useState<number | null>(null);
   const [draftReady, setDraftReady] = useState(false);
 
@@ -738,6 +739,18 @@ export default function Home() {
     setNotice(`${format.toUpperCase()} 파일을 저장했습니다.`);
   }
 
+  function sendInquiry() {
+    const message = inquiry.trim();
+    if (!message) {
+      setNotice("문의 내용을 입력해주세요.");
+      return;
+    }
+    const subject = encodeURIComponent(`[Kakao Maker 문의] ${typeInfo.title}`);
+    const body = encodeURIComponent(`안녕하세요. Kakao Maker 관련 문의드립니다.\n\n${message}\n\n선택한 제작 유형: ${typeInfo.title}`);
+    window.location.href = `mailto:somin.jo@playd.com?subject=${subject}&body=${body}`;
+    setNotice("메일 앱을 열었습니다. 내용을 확인한 뒤 최종 발송해주세요.");
+  }
+
   const complete = Boolean((product.image || product2.image) && (advertiser.image || advertiserText.trim()) && mainCopy.trim() && subCopy.trim());
   const typeInfo = TYPE_COPY[template];
 
@@ -778,6 +791,14 @@ export default function Home() {
 
       <section className="maker-section" aria-labelledby="maker-title">
         <div className="section-heading"><span>STEP 02</span><div><h2 id="maker-title">{typeInfo.title} 제작</h2><p>{typeInfo.summary}</p></div></div>
+        <div className="maker-contact">
+          <div className="maker-contact-copy"><span>CONTACT</span><div><strong>문의사항 및 추가 요청 사항은 <a href="mailto:somin.jo@playd.com">somin.jo@playd.com</a>으로 연락바랍니다.</strong><small>문의 내용을 입력하고 발송을 누르면 수신인과 내용이 작성된 메일 앱이 열립니다.</small></div></div>
+          <div className="maker-contact-form">
+            <label htmlFor="maker-inquiry" className="visually-hidden">문의 내용</label>
+            <textarea id="maker-inquiry" value={inquiry} maxLength={1000} placeholder="문의 또는 추가 요청 사항을 입력해주세요." onChange={(event) => setInquiry(event.target.value)} />
+            <button type="button" onClick={sendInquiry} disabled={!inquiry.trim()}>문의 발송</button>
+          </div>
+        </div>
         <div className="maker-shell">
           <aside className="control-panel">
             <div className="panel-title"><div><span>INPUT</span><h3>소재 구성</h3></div><button type="button" onClick={reset}>전체 초기화</button></div>
@@ -899,10 +920,10 @@ export default function Home() {
                     {template === "badge" && <div className="guide-flag"><span>배지</span></div>}
                   </div>
                 )}
-                {(activeProduct === "product" || activeProduct === "both") && productRect && (
+                {showGuides && (activeProduct === "product" || activeProduct === "both") && productRect && (
                   <div className="image-selection image-one" style={{ left: `${productRect.x / WIDTH * 100}%`, top: `${productRect.y / HEIGHT * 100}%`, width: `${productRect.width / WIDTH * 100}%`, height: `${productRect.height / HEIGHT * 100}%` }}><span>이미지 1 선택</span></div>
                 )}
-                {(activeProduct === "product2" || activeProduct === "both") && product2Rect && (
+                {showGuides && (activeProduct === "product2" || activeProduct === "both") && product2Rect && (
                   <div className="image-selection image-two" style={{ left: `${product2Rect.x / WIDTH * 100}%`, top: `${product2Rect.y / HEIGHT * 100}%`, width: `${product2Rect.width / WIDTH * 100}%`, height: `${product2Rect.height / HEIGHT * 100}%` }}><span>이미지 2 선택</span></div>
                 )}
               </div>
