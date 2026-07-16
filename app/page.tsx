@@ -43,7 +43,7 @@ type CopyLine = {
   text: string;
   x: number;
   baseline: number;
-  maxWidth: number;
+  clipArea: Rect;
   align: CanvasTextAlign;
   size: number;
   weight: 400 | 700;
@@ -297,8 +297,8 @@ function getCopyLines(
     const activeSubCopy = subCopyEnabled ? subCopy.trim() : "";
     const mainBaseline = activeSubCopy ? 113 : 145;
     return [
-      { label: "메인카피", text: mainCopy.trim(), x: getAlignedTextX(copyArea, alignments.mainAlign), baseline: mainBaseline, maxWidth, align: alignments.mainAlign, size: mainFontSize, weight: 700, color: MAIN_COPY_COLOR },
-      { label: "서브카피", text: activeSubCopy, x: getAlignedTextX(copyArea, alignments.subAlign), baseline: 174, maxWidth, align: alignments.subAlign, size: subFontSize, weight: 400, color: SUB_COPY_COLOR },
+      { label: "메인카피", text: mainCopy.trim(), x: getAlignedTextX(copyArea, alignments.mainAlign), baseline: mainBaseline, clipArea: copyArea, align: alignments.mainAlign, size: mainFontSize, weight: 700, color: MAIN_COPY_COLOR },
+      { label: "서브카피", text: activeSubCopy, x: getAlignedTextX(copyArea, alignments.subAlign), baseline: 174, clipArea: copyArea, align: alignments.subAlign, size: subFontSize, weight: 400, color: SUB_COPY_COLOR },
     ] satisfies CopyLine[];
   }
 
@@ -315,74 +315,22 @@ function getCopyLines(
   const rightMainBaseline = activeRightSub ? 113 : 145;
   return [
     {
-      label: "좌측 메인카피", text: mainCopy.trim(), x: getAlignedTextX(leftArea, alignments.centerLeftMainAlign), baseline: leftMainBaseline, maxWidth: leftWidth, align: alignments.centerLeftMainAlign,
+      label: "좌측 메인카피", text: mainCopy.trim(), x: getAlignedTextX(leftArea, alignments.centerLeftMainAlign), baseline: leftMainBaseline, clipArea: leftArea, align: alignments.centerLeftMainAlign,
       size: mainFontSize, weight: 700, color: MAIN_COPY_COLOR,
     },
     {
-      label: "좌측 서브카피", text: activeLeftSub, x: getAlignedTextX(leftArea, alignments.centerLeftSubAlign), baseline: 174, maxWidth: leftWidth, align: alignments.centerLeftSubAlign,
+      label: "좌측 서브카피", text: activeLeftSub, x: getAlignedTextX(leftArea, alignments.centerLeftSubAlign), baseline: 174, clipArea: leftArea, align: alignments.centerLeftSubAlign,
       size: subFontSize, weight: 400, color: SUB_COPY_COLOR,
     },
     {
-      label: "우측 메인카피", text: subCopy.trim(), x: getAlignedTextX(rightArea, alignments.centerRightMainAlign), baseline: rightMainBaseline, maxWidth: rightWidth, align: alignments.centerRightMainAlign,
+      label: "우측 메인카피", text: subCopy.trim(), x: getAlignedTextX(rightArea, alignments.centerRightMainAlign), baseline: rightMainBaseline, clipArea: rightArea, align: alignments.centerRightMainAlign,
       size: mainFontSize, weight: 700, color: MAIN_COPY_COLOR,
     },
     {
-      label: "우측 서브카피", text: activeRightSub, x: getAlignedTextX(rightArea, alignments.centerRightSubAlign), baseline: 174, maxWidth: rightWidth, align: alignments.centerRightSubAlign,
+      label: "우측 서브카피", text: activeRightSub, x: getAlignedTextX(rightArea, alignments.centerRightSubAlign), baseline: 174, clipArea: rightArea, align: alignments.centerRightSubAlign,
       size: subFontSize, weight: 400, color: SUB_COPY_COLOR,
     },
   ] satisfies CopyLine[];
-}
-
-function measureCopyLine(ctx: CanvasRenderingContext2D, line: CopyLine): Rect {
-  ctx.font = `${line.weight} ${line.size}px Pretendard, "Noto Sans KR", sans-serif`;
-  const metrics = ctx.measureText(line.text);
-  const width = metrics.width;
-  const ascent = metrics.actualBoundingBoxAscent || line.size * .8;
-  const descent = metrics.actualBoundingBoxDescent || line.size * .2;
-  const x = line.align === "right" ? line.x - width : line.x;
-  return { x, y: line.baseline - ascent, width, height: ascent + descent };
-}
-
-function getImageRect(
-  image: HTMLImageElement | null,
-  box: Rect,
-  scalePercent: number,
-  offsetX: number,
-  offsetY: number,
-) {
-  if (!image) return null;
-  const baseScale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
-  const scale = baseScale * (scalePercent / 100);
-  const width = image.naturalWidth * scale;
-  const height = image.naturalHeight * scale;
-  return {
-    x: box.x + (box.width - width) / 2 + offsetX,
-    y: box.y + (box.height - height) / 2 + offsetY,
-    width,
-    height,
-  };
-}
-
-function unionRects(rects: Array<Rect | null>) {
-  const available = rects.filter((rect): rect is Rect => Boolean(rect));
-  if (!available.length) return null;
-  const left = Math.min(...available.map((rect) => rect.x));
-  const top = Math.min(...available.map((rect) => rect.y));
-  const right = Math.max(...available.map((rect) => rect.x + rect.width));
-  const bottom = Math.max(...available.map((rect) => rect.y + rect.height));
-  return { x: left, y: top, width: right - left, height: bottom - top };
-}
-
-function containsRect(container: Rect, rect: Rect) {
-  return rect.x >= container.x && rect.y >= container.y
-    && rect.x + rect.width <= container.x + container.width
-    && rect.y + rect.height <= container.y + container.height;
-}
-
-function horizontalGap(first: Rect, second: Rect) {
-  if (first.x + first.width <= second.x) return second.x - (first.x + first.width);
-  if (second.x + second.width <= first.x) return first.x - (second.x + second.width);
-  return -1;
 }
 
 function intersectsRect(first: Rect, second: Rect) {
@@ -414,6 +362,16 @@ function drawContainedImage(
     height,
   );
   ctx.restore();
+}
+
+function traceBadgeFlag(ctx: CanvasRenderingContext2D, x: number) {
+  ctx.beginPath();
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x + 64, 0);
+  ctx.lineTo(x + 64, 58);
+  ctx.lineTo(x + 32, 78);
+  ctx.lineTo(x, 58);
+  ctx.closePath();
 }
 
 function getVisibleImageRect(
@@ -677,11 +635,16 @@ export default function Home() {
     });
     for (const line of copyLines) {
       if (!line.text) continue;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(line.clipArea.x, line.clipArea.y, line.clipArea.width, line.clipArea.height);
+      ctx.clip();
       ctx.fillStyle = line.color;
       ctx.textAlign = line.align;
       ctx.textBaseline = "alphabetic";
       ctx.font = `${line.weight} ${line.size}px Pretendard, "Noto Sans KR", sans-serif`;
       ctx.fillText(line.text, line.x, line.baseline);
+      ctx.restore();
     }
 
     if (template === "badge") {
@@ -692,50 +655,27 @@ export default function Home() {
         ? SAFE_AREA.x + SAFE_AREA.width - 64
         : SAFE_AREA.x;
       ctx.fillStyle = flagColor;
-      ctx.beginPath();
-      ctx.moveTo(flagX, 0);
-      ctx.lineTo(flagX + 64, 0);
-      ctx.lineTo(flagX + 64, 58);
-      ctx.lineTo(flagX + 32, 78);
-      ctx.lineTo(flagX, 58);
-      ctx.closePath();
+      traceBadgeFlag(ctx, flagX);
       ctx.fill();
+      ctx.save();
+      traceBadgeFlag(ctx, flagX);
+      ctx.clip();
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.font = "800 26px Pretendard, 'Noto Sans KR', sans-serif";
-      ctx.fillText(badgeText.trim() || "10%", flagX + 32, 28, 58);
+      ctx.fillText(badgeText.trim() || "10%", flagX + 32, 28);
+      ctx.restore();
     } else {
       drawAdvertiser(ctx, advertiser, advertiserText, SAFE_AREA.x + SAFE_AREA.width - 2, 42, "right");
     }
   }, [advertiser, advertiserText, badgeText, bg, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, flagColor, fontsReady, mainAlign, mainCopy, mainFontSize, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subAlign, subCopy, subCopyEnabled, subFontSize, template]);
 
-  const validateLayout = useCallback((ctx: CanvasRenderingContext2D) => {
+  const validateLayout = useCallback(() => {
     const issues: string[] = [];
     const productBox = getProductBox(template, objectSide);
-    const firstRect = getImageRect(product.image, productBox, productScale, productX, productY);
-    const secondRect = getImageRect(product2.image, productBox, product2Scale, product2X, product2Y);
-    const combinedRect = unionRects([firstRect, secondRect]);
-    if ([firstRect, secondRect].some((rect) => rect && !containsRect(productBox, rect))) {
-      issues.push("오브젝트가 438×258 최대 영역에서 잘립니다. 크기를 줄이거나 안쪽으로 이동하세요.");
-    }
-    if (combinedRect && (combinedRect.width > OBJECT_MAX_WIDTH + .5 || combinedRect.height > HEIGHT + .5)) {
-      issues.push("두 이미지를 합친 오브젝트 그룹이 최대 438×258을 초과합니다.");
-    }
-
-    const lines = getCopyLines(ctx, template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize, {
-      mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
-    });
-    let spacingIssue = false;
-    for (const line of lines) {
-      if (!line.text) continue;
-      const lineRect = measureCopyLine(ctx, line);
-      if (lineRect.width > line.maxWidth + .5 || !containsRect(COPY_AREA, lineRect)) {
-        issues.push(`${line.label}가 ${line.size}pt에서 1줄 허용영역을 벗어납니다. 문구를 줄이거나 글자 크기를 조정하세요.`);
-      }
-      if (combinedRect && horizontalGap(lineRect, combinedRect) < MIN_COPY_OBJECT_GAP) spacingIssue = true;
-    }
-    if (spacingIssue) issues.push("카피와 오브젝트 사이 최소 간격 33px을 확보하세요.");
+    const firstRect = getVisibleImageRect(product.image, productBox, productScale, productX, productY);
+    const secondRect = getVisibleImageRect(product2.image, productBox, product2Scale, product2X, product2Y);
 
     if (template === "badge") {
       const flagCopy = badgeText.trim();
@@ -745,20 +685,16 @@ export default function Home() {
         width: 64,
         height: 78,
       };
-      if (combinedRect && intersectsRect(combinedRect, flagRect)) {
+      if ([firstRect, secondRect].some((rect) => rect && intersectsRect(rect, flagRect))) {
         issues.push("오브젝트와 배지 플래그가 겹칩니다. 이미지 크기나 위치를 조정하세요.");
       }
       if (!flagCopy || /\s/u.test(flagCopy)) issues.push("배지 플래그 문구는 띄어쓰기 없는 1어절로 입력하세요.");
       if (flagCopy && (!/^[\p{L}\p{N}%!+]+$/u.test(flagCopy) || /[%!+]{2,}/u.test(flagCopy))) {
         issues.push("배지 플래그 특수기호는 %, !, +만 사용할 수 있고 연속 기재할 수 없습니다.");
       }
-      ctx.font = "800 26px Pretendard, 'Noto Sans KR', sans-serif";
-      if (flagCopy && ctx.measureText(flagCopy).width > 58) {
-        issues.push("배지 플래그 문구가 배지 영역을 벗어납니다. 더 짧은 1어절로 입력하세요.");
-      }
     }
     return Array.from(new Set(issues));
-  }, [badgeText, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, mainAlign, mainCopy, mainFontSize, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subAlign, subCopy, subCopyEnabled, subFontSize, template]);
+  }, [badgeText, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, template]);
 
   useEffect(() => {
     let cancelled = false;
@@ -774,8 +710,7 @@ export default function Home() {
 
   useEffect(() => {
     draw();
-    const context = canvasRef.current?.getContext("2d");
-    if (context) setLayoutIssues(validateLayout(context));
+    if (canvasRef.current) setLayoutIssues(validateLayout());
     const timer = window.setTimeout(() => {
       canvasRef.current?.toBlob((blob) => setFileBytes(blob?.size ?? null), "image/png");
     }, 80);
@@ -1381,7 +1316,7 @@ export default function Home() {
                 <span className="copy-key"><i />주황: 카피 안전영역</span>
                 <span className="object-key"><i />파랑: 오브젝트 최대영역</span>
                 <span className="gap-key"><i />노랑: 최소 간격 33px</span>
-                <b>바깥 점선은 완성 배너 안의 933×258 내부 지정영역입니다.</b>
+                <b>텍스트와 오브젝트는 각 허용영역 밖으로 나간 부분이 자동으로 잘립니다.</b>
               </div>
             )}
             <div className="preview-meta">
@@ -1400,7 +1335,7 @@ export default function Home() {
         <div className="guide-cards">
           <article><span>01</span><h3>광고주체 표기</h3>{template === "badge" ? <ul><li>기존 오브젝트 영역 안에서 반드시 표기합니다.</li><li>오브젝트 좌·우 정렬에 맞춰 하단 끝에 배치합니다.</li><li>카피·오브젝트의 가독성을 침범하지 않는 크기로 구성합니다.</li></ul> : <ul><li>중앙 오브젝트형에 한해 카피 영역 내 표기가 허용됩니다.</li><li>지정 영역 좌측 최상단 또는 우측 최상단 정렬만 가능합니다.</li><li>영역 내 자유 배치나 카피·오브젝트와의 밀착은 불가합니다.</li></ul>}</article>
           <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>메인·서브 카피는 각각 최대 1줄입니다.</li><li>메인은 Pretendard Bold, 39~51pt, #4C4C4C입니다.</li><li>서브는 Pretendard Regular, 39~51pt, #777777입니다.</li><li>서브는 ON/OFF할 수 있으며 배지 플래그는 1어절로 구성합니다.</li></ul> : <ul><li>좌·우 메인과 좌·우 서브는 각각 최대 1줄입니다.</li><li>메인·서브 모두 39~51pt 범위에서 1pt 단위로 조절합니다.</li><li>같은 카피 유형은 좌우 크기·굵기·색상을 동일하게 적용합니다.</li><li>좌·우 서브는 각각 ON/OFF하고 모든 카피의 정렬을 선택할 수 있습니다.</li></ul>}</article>
-          <article><span>03</span><h3>오브젝트·출력 가이드</h3>{template === "badge" ? <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트는 좌측 또는 우측에 두며 중앙 배열은 불가합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>카피와 오브젝트 사이 최소 33px을 확보합니다.</li></ul> : <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트 그룹을 소재 중앙 최대영역 안에 배치합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>좌우 카피와 오브젝트 사이 최소 33px을 확보합니다.</li></ul>}</article>
+          <article><span>03</span><h3>오브젝트·출력 가이드</h3>{template === "badge" ? <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트는 좌측 또는 우측에 두며 중앙 배열은 불가합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>카피·오브젝트가 허용영역을 넘으면 바깥 부분은 자동으로 잘립니다.</li></ul> : <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트 그룹을 소재 중앙 최대영역 안에 배치합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>좌우 카피·오브젝트가 허용영역을 넘으면 바깥 부분은 자동으로 잘립니다.</li></ul>}</article>
         </div>
         <p className="review-note"><b>심사 유의사항</b> PNG-24/32, 300KB 이하로 등록해야 합니다. 본 완화 가이드는 카카오 제공 PSD 템플릿 사용을 전제로 하므로 최종 집행 전 PSD 템플릿과 모먼트 에셋 기준을 함께 확인하세요.</p>
       </section>
