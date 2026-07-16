@@ -151,6 +151,31 @@ const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
   },
 };
 
+function normalizeCopyAlign(value: unknown, fallback: CopyAlign): CopyAlign {
+  return value === "left" || value === "center" || value === "right" ? value : fallback;
+}
+
+function mergeTemplateDraft(template: TemplateType, saved: Partial<TemplateDraft> = {}): TemplateDraft {
+  const fallback = DEFAULT_TEMPLATE_DRAFTS[template];
+  const merged = { ...fallback, ...saved };
+  const mainSize = Number(merged.mainFontSize);
+  const subSize = Number(merged.subFontSize);
+  return {
+    ...merged,
+    subCopyEnabled: typeof saved.subCopyEnabled === "boolean" ? saved.subCopyEnabled : Boolean(merged.subCopy.trim()),
+    centerLeftSubEnabled: typeof saved.centerLeftSubEnabled === "boolean" ? saved.centerLeftSubEnabled : Boolean(merged.centerLeftSub.trim()),
+    centerRightSubEnabled: typeof saved.centerRightSubEnabled === "boolean" ? saved.centerRightSubEnabled : Boolean(merged.centerRightSub.trim()),
+    mainFontSize: Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, Number.isFinite(mainSize) ? mainSize : fallback.mainFontSize)),
+    subFontSize: Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, Number.isFinite(subSize) ? subSize : fallback.subFontSize)),
+    mainAlign: normalizeCopyAlign(merged.mainAlign, fallback.mainAlign),
+    subAlign: normalizeCopyAlign(merged.subAlign, fallback.subAlign),
+    centerLeftMainAlign: normalizeCopyAlign(merged.centerLeftMainAlign, fallback.centerLeftMainAlign),
+    centerRightMainAlign: normalizeCopyAlign(merged.centerRightMainAlign, fallback.centerRightMainAlign),
+    centerLeftSubAlign: normalizeCopyAlign(merged.centerLeftSubAlign, fallback.centerLeftSubAlign),
+    centerRightSubAlign: normalizeCopyAlign(merged.centerRightSubAlign, fallback.centerRightSubAlign),
+  };
+}
+
 const EMPTY_ASSET: AssetState = { file: null, image: null, url: "" };
 
 function normalizeHex(value: string, fallback: string) {
@@ -769,14 +794,11 @@ export default function Home() {
           restoredTemplate = savedTemplate;
           if (saved.templateDrafts?.badge && saved.templateDrafts?.center) {
             templateDraftsRef.current = {
-              badge: { ...DEFAULT_TEMPLATE_DRAFTS.badge, ...saved.templateDrafts.badge },
-              center: { ...DEFAULT_TEMPLATE_DRAFTS.center, ...saved.templateDrafts.center },
+              badge: mergeTemplateDraft("badge", saved.templateDrafts.badge),
+              center: mergeTemplateDraft("center", saved.templateDrafts.center),
             };
           } else {
-            templateDraftsRef.current[savedTemplate] = {
-              ...DEFAULT_TEMPLATE_DRAFTS[savedTemplate],
-              ...saved,
-            } as TemplateDraft;
+            templateDraftsRef.current[savedTemplate] = mergeTemplateDraft(savedTemplate, saved as Partial<TemplateDraft>);
           }
           setTemplate(savedTemplate);
           applyTemplateDraft(templateDraftsRef.current[savedTemplate]);
