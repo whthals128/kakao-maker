@@ -385,23 +385,23 @@ export default function Home() {
       ctx.fillStyle = copyColor;
       ctx.textBaseline = "alphabetic";
       ctx.textAlign = "left";
-      const leftSize = fitFont(ctx, mainCopy, 230, 40, 700);
+      const leftSize = fitFont(ctx, mainCopy, 190, 40, 700);
       ctx.font = `700 ${leftSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      ctx.fillText(mainCopy.trim() || "좌측 메인카피", 47, 126, 230);
+      ctx.fillText(mainCopy.trim() || "좌측 메인카피", 47, 126, 190);
       ctx.fillStyle = "#777777";
-      const leftSubSize = fitFont(ctx, centerLeftSub, 230, 27, 400);
+      const leftSubSize = fitFont(ctx, centerLeftSub, 190, 27, 400);
       ctx.font = `400 ${leftSubSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      if (centerLeftSub.trim()) ctx.fillText(centerLeftSub.trim(), 47, 164, 230);
+      if (centerLeftSub.trim()) ctx.fillText(centerLeftSub.trim(), 47, 164, 190);
 
       ctx.fillStyle = copyColor;
       ctx.textAlign = "right";
-      const rightSize = fitFont(ctx, subCopy, 230, 40, 700);
+      const rightSize = fitFont(ctx, subCopy, 190, 40, 700);
       ctx.font = `700 ${rightSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      ctx.fillText(subCopy.trim() || "우측 메인카피", 886, 126, 230);
+      ctx.fillText(subCopy.trim() || "우측 메인카피", 886, 126, 190);
       ctx.fillStyle = "#777777";
-      const rightSubSize = fitFont(ctx, centerRightSub, 230, 27, 400);
+      const rightSubSize = fitFont(ctx, centerRightSub, 190, 27, 400);
       ctx.font = `400 ${rightSubSize}px Pretendard, "Noto Sans KR", sans-serif`;
-      if (centerRightSub.trim()) ctx.fillText(centerRightSub.trim(), 886, 164, 230);
+      if (centerRightSub.trim()) ctx.fillText(centerRightSub.trim(), 886, 164, 190);
       drawAdvertiser(ctx, advertiser, advertiserText, 884, 42, "right");
     }
   }, [advertiser, advertiserText, badgeText, bg, centerLeftSub, centerRightSub, copyColor, flagColor, fontsReady, mainCopy, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subCopy, template]);
@@ -801,7 +801,7 @@ export default function Home() {
           </aside>
 
           <div className="preview-panel">
-            <div className="preview-title"><div><span>LIVE PREVIEW</span><h3>{typeInfo.title}</h3></div>{template === "center" && <span className="center-area-chip">실제 삽입 영역 438×258 · 50% 중앙선</span>}<label><input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> 가이드 영역</label></div>
+            <div className="preview-title"><div><span>LIVE PREVIEW</span><h3>{typeInfo.title}</h3></div>{template === "center" && <span className="center-area-chip">좌측 카피 · 중앙 오브젝트 · 우측 카피</span>}<label><input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> 가이드 영역</label></div>
             <div className="drag-toolbar">
               <span>미리보기에서 이동할 이미지</span>
               <div className="layer-selector">
@@ -831,7 +831,12 @@ export default function Home() {
                 />
                 {showGuides && (
                   <div className={`guide-overlay ${template} ${objectSide}`}>
-                    <div className="guide-copy"><span>카피 영역</span></div>
+                    {template === "center" ? (
+                      <>
+                        <div className="guide-copy left"><span>좌측 카피 권장 영역</span></div>
+                        <div className="guide-copy right"><span>우측 카피 권장 영역</span></div>
+                      </>
+                    ) : <div className="guide-copy"><span>카피 영역</span></div>}
                     <div className="guide-object"><span>{template === "center" ? "실제 오브젝트 삽입 영역 438×258" : "오브젝트 최대 438×258"}</span>{template === "center" && <i className="object-half-line"><b>50% 중앙선</b></i>}</div>
                     <div className="guide-ad"><span>광고주체</span></div>
                     {template === "badge" && <div className="guide-flag"><span>배지</span></div>}
@@ -839,6 +844,13 @@ export default function Home() {
                 )}
               </div>
             </div>
+            {showGuides && (
+              <div className="guide-legend" role="note">
+                <span className="copy-key"><i />주황: 카피 권장 영역</span>
+                <span className="object-key"><i />파랑: 오브젝트 삽입 영역</span>
+                <b>가이드 박스는 서로 닿지 않게 표시되며, 실제 요소도 겹치지 않게 배치합니다.</b>
+              </div>
+            )}
             <div className="preview-meta">
               <div className={complete ? "status complete" : "status pending"}><i /><div><b>{complete ? "필수 요소 입력 완료" : "필수 요소를 입력해주세요"}</b><small>{complete ? "배치와 가독성을 최종 확인하세요." : "상품 이미지 · 카피 · 광고주체가 필요합니다."}</small></div></div>
               <div className="file-info"><span>PNG 예상 용량</span><b>{fileBytes === null ? "계산 중" : `${Math.ceil(fileBytes / 1024)} KB`}</b></div>
