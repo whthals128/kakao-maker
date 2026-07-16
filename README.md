@@ -4,7 +4,7 @@
 
 ## Live
 
-- [Kakao Maker 실행하기](https://resize-lab-kr.whthals128.chatgpt.site/)
+- [Kakao Maker 실행하기](https://kakao-maker-kr.whthals128.chatgpt.site/)
 
 ## 주요 기능
 
