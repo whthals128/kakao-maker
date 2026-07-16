@@ -16,7 +16,7 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: Pretendard, "Noto Sans KR", sans-serif; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { cursor: pointer; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -162,17 +162,30 @@ button { cursor: pointer; }
 .preview-title label { display: flex; align-items: center; gap: 5px; color: #777; font-size: 9px; }
 .preview-title input { accent-color: var(--ink); }
 .preview-copy-editor { margin-bottom: 10px; padding: 10px; border: 1px solid #d9d4cb; border-radius: 11px; background: white; }
-.preview-copy-heading { margin-bottom: 8px; display: flex; align-items: baseline; gap: 8px; }
+.preview-copy-heading { margin-bottom: 8px; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px 12px; }
+.preview-copy-heading > div:first-child { display: flex; align-items: baseline; gap: 8px; }
 .preview-copy-heading strong { font-size: 10px; }
-.preview-copy-heading > span { color: #99938b; font-size: 8px; }
+.preview-copy-heading > div:first-child > span { color: #99938b; font-size: 8px; }
+.copy-size-controls { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.copy-size-controls label { min-width: 142px; height: 27px; padding: 0 7px; display: grid; grid-template-columns: 28px minmax(52px,1fr) 35px; align-items: center; gap: 5px; border: 1px solid #ded9d0; border-radius: 7px; background: #f8f6f2; color: #6d675f; font-size: 7px; font-weight: 700; }
+.copy-size-controls input { min-width: 0; width: 100%; accent-color: var(--ink); }
+.copy-size-controls b { color: var(--ink); font: 800 7px/1 Manrope, sans-serif; text-align: right; }
 .preview-copy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .preview-copy-grid.center { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.copy-control-field { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px; }
 .preview-copy-grid label { min-width: 0; display: grid; grid-template-columns: 68px minmax(0, 1fr); overflow: hidden; border: 1px solid #ded9d0; border-radius: 8px; background: #fff; }
 .preview-copy-grid label > span { display: flex; align-items: center; justify-content: center; gap: 3px; background: #f1efea; color: #69645c; font-size: 8px; font-weight: 700; white-space: nowrap; }
-.preview-copy-grid em { padding: 2px 3px; border-radius: 3px; background: #e7e3dc; color: #8b857c; font-size: 6px; font-style: normal; }
 .preview-copy-grid input { min-width: 0; width: 100%; height: 32px; padding: 0 8px; border: 0; outline: 0; font-size: 9px; }
 .preview-copy-grid input::placeholder { color: #b7b1a8; }
 .preview-copy-grid label:focus-within { border-color: var(--ink); box-shadow: 0 0 0 2px rgba(254,229,0,.35); }
+.copy-field-actions { display: flex; gap: 4px; }
+.copy-align-select, .copy-use-toggle { height: 34px; border: 1px solid #d9d4cb; border-radius: 7px; background: white; color: #69645c; font-size: 7px; font-weight: 800; }
+.copy-align-select { width: 49px; padding: 0 4px; }
+.copy-use-toggle { width: 38px; padding: 0; cursor: pointer; }
+.copy-use-toggle[aria-pressed="true"] { border-color: #1b7b49; background: #e7f7ed; color: #147041; }
+.copy-control-field.off label { opacity: .52; }
+.copy-control-field.off .copy-align-select { opacity: .52; }
+.copy-align-select:focus, .copy-use-toggle:focus { outline: 2px solid rgba(254,229,0,.75); outline-offset: 1px; }
 .drag-toolbar { margin: 0 0 10px; padding: 7px 9px; display: flex; align-items: center; gap: 8px; border: 1px solid #ddd8cf; border-radius: 10px; background: white; }
 .drag-toolbar > span { color: #666159; font-size: 8px; font-weight: 700; }
 .drag-toolbar > div { padding: 2px; display: flex; gap: 2px; border-radius: 7px; background: #eeece7; }
@@ -317,6 +330,9 @@ footer a { color: var(--ink); font-weight: 700; text-underline-offset: 2px; }
   .maker-contact-popover { width: 100%; margin-top: 6px; position: relative; top: auto; right: auto; }
   .maker-contact-form { grid-template-columns: 1fr; }
   .maker-contact-form button { min-height: 38px; }
+  .preview-copy-heading { align-items: stretch; flex-direction: column; }
+  .copy-size-controls { width: 100%; margin-left: 0; }
+  .copy-size-controls label { min-width: 0; flex: 1; }
   .preview-copy-grid, .preview-copy-grid.center { grid-template-columns: 1fr; }
   .drag-toolbar { align-items: flex-start; flex-wrap: wrap; }
   .drag-toolbar small { width: 100%; margin-left: 0; }

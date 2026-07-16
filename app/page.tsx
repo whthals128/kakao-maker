@@ -21,14 +21,17 @@ const MIN_COPY_OBJECT_GAP = 33;
 const MAX_FILE_BYTES = 300 * 1024;
 const MAIN_COPY_COLOR = "#4C4C4C";
 const SUB_COPY_COLOR = "#777777";
-const MAIN_COPY_SIZE = 48;
-const SUB_COPY_SIZE = 39;
+const COPY_FONT_MIN = 39;
+const COPY_FONT_MAX = 51;
+const DEFAULT_MAIN_FONT_SIZE = 48;
+const DEFAULT_SUB_FONT_SIZE = 39;
 const SETTINGS_KEY = "kakao-maker:settings:v1";
 const DB_NAME = "kakao-maker-assets";
 const STORE_NAME = "assets";
 
 type TemplateType = "badge" | "center";
 type ObjectSide = "left" | "right";
+type CopyAlign = "left" | "center" | "right";
 type AssetKey = "product" | "product2" | "advertiser";
 type ProductAssetKey = Exclude<AssetKey, "advertiser">;
 type StoredAssetKey = AssetKey | `${TemplateType}:${ProductAssetKey}`;
@@ -48,12 +51,31 @@ type CopyLine = {
 };
 type AssetState = { file: File | null; image: HTMLImageElement | null; url: string };
 type StoredAsset = { blob: Blob; name: string; type: string };
+type CopyAlignmentSettings = {
+  mainAlign: CopyAlign;
+  subAlign: CopyAlign;
+  centerLeftMainAlign: CopyAlign;
+  centerRightMainAlign: CopyAlign;
+  centerLeftSubAlign: CopyAlign;
+  centerRightSubAlign: CopyAlign;
+};
 type TemplateDraft = {
   objectSide: ObjectSide;
   mainCopy: string;
   subCopy: string;
   centerLeftSub: string;
   centerRightSub: string;
+  subCopyEnabled: boolean;
+  centerLeftSubEnabled: boolean;
+  centerRightSubEnabled: boolean;
+  mainFontSize: number;
+  subFontSize: number;
+  mainAlign: CopyAlign;
+  subAlign: CopyAlign;
+  centerLeftMainAlign: CopyAlign;
+  centerRightMainAlign: CopyAlign;
+  centerLeftSubAlign: CopyAlign;
+  centerRightSubAlign: CopyAlign;
   advertiserText: string;
   badgeText: string;
   background: string;
@@ -75,6 +97,17 @@ type Settings = {
   subCopy: string;
   centerLeftSub: string;
   centerRightSub: string;
+  subCopyEnabled: boolean;
+  centerLeftSubEnabled: boolean;
+  centerRightSubEnabled: boolean;
+  mainFontSize: number;
+  subFontSize: number;
+  mainAlign: CopyAlign;
+  subAlign: CopyAlign;
+  centerLeftMainAlign: CopyAlign;
+  centerRightMainAlign: CopyAlign;
+  centerLeftSubAlign: CopyAlign;
+  centerRightSubAlign: CopyAlign;
   advertiserText: string;
   badgeText: string;
   background: string;
@@ -97,6 +130,10 @@ const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
   badge: {
     objectSide: "right", mainCopy: "쫀득쫀득 촉감의 매력", subCopy: "오늘만 10% 추가적립",
     centerLeftSub: "오늘만 10% 추가적립", centerRightSub: "니니즈 스페셜 필로우", advertiserText: "J.ESTINA",
+    subCopyEnabled: true, centerLeftSubEnabled: false, centerRightSubEnabled: false,
+    mainFontSize: DEFAULT_MAIN_FONT_SIZE, subFontSize: DEFAULT_SUB_FONT_SIZE,
+    mainAlign: "left", subAlign: "left", centerLeftMainAlign: "left", centerRightMainAlign: "right",
+    centerLeftSubAlign: "left", centerRightSubAlign: "right",
     badgeText: "10%", background: "#F5F5F5", textColor: "#4C4C4C", badgeColor: "#FF3B00",
     productScale: 100, productX: 0, productY: 0, product2Scale: 82, product2X: 62, product2Y: 18,
     activeProduct: "product", groupScaleOffset: 0,
@@ -104,6 +141,10 @@ const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
   center: {
     objectSide: "right", mainCopy: "쫀득쫀득", subCopy: "바디필로우",
     centerLeftSub: "", centerRightSub: "", advertiserText: "J.ESTINA",
+    subCopyEnabled: true, centerLeftSubEnabled: false, centerRightSubEnabled: false,
+    mainFontSize: DEFAULT_MAIN_FONT_SIZE, subFontSize: DEFAULT_SUB_FONT_SIZE,
+    mainAlign: "left", subAlign: "left", centerLeftMainAlign: "left", centerRightMainAlign: "right",
+    centerLeftSubAlign: "left", centerRightSubAlign: "right",
     badgeText: "10%", background: "#F5F5F5", textColor: "#4C4C4C", badgeColor: "#FF3B00",
     productScale: 100, productX: 0, productY: 0, product2Scale: 82, product2X: 62, product2Y: 18,
     activeProduct: "product", groupScaleOffset: 0,
@@ -201,6 +242,11 @@ function getProductBox(template: TemplateType, objectSide: ObjectSide): Rect {
     : { x: SAFE_AREA.x, y: 0, width: OBJECT_MAX_WIDTH, height: HEIGHT };
 }
 
+function getAlignedTextX(area: Rect, align: CopyAlign) {
+  if (align === "center") return area.x + area.width / 2;
+  return align === "right" ? area.x + area.width : area.x;
+}
+
 function getCopyLines(
   ctx: CanvasRenderingContext2D,
   template: TemplateType,
@@ -209,17 +255,25 @@ function getCopyLines(
   subCopy: string,
   centerLeftSub: string,
   centerRightSub: string,
+  subCopyEnabled: boolean,
+  centerLeftSubEnabled: boolean,
+  centerRightSubEnabled: boolean,
+  mainFontSize: number,
+  subFontSize: number,
+  alignments: CopyAlignmentSettings,
 ) {
   if (template === "badge") {
     const productBox = getProductBox(template, objectSide);
-    const align: CanvasTextAlign = objectSide === "right" ? "left" : "right";
-    const x = objectSide === "right" ? SAFE_AREA.x : SAFE_AREA.x + SAFE_AREA.width;
+    const copyAreaX = objectSide === "right" ? SAFE_AREA.x : productBox.x + productBox.width + MIN_COPY_OBJECT_GAP;
     const maxWidth = objectSide === "right"
-      ? productBox.x - MIN_COPY_OBJECT_GAP - x
-      : x - (productBox.x + productBox.width + MIN_COPY_OBJECT_GAP);
+      ? productBox.x - MIN_COPY_OBJECT_GAP - copyAreaX
+      : SAFE_AREA.x + SAFE_AREA.width - copyAreaX;
+    const copyArea = { x: copyAreaX, y: COPY_AREA.y, width: maxWidth, height: COPY_AREA.height };
+    const activeSubCopy = subCopyEnabled ? subCopy.trim() : "";
+    const mainBaseline = activeSubCopy ? 113 : 145;
     return [
-      { label: "메인카피", text: mainCopy.trim(), x, baseline: 118, maxWidth, align, size: MAIN_COPY_SIZE, weight: 700, color: MAIN_COPY_COLOR },
-      { label: "서브카피", text: subCopy.trim(), x, baseline: 166, maxWidth, align, size: SUB_COPY_SIZE, weight: 400, color: SUB_COPY_COLOR },
+      { label: "메인카피", text: mainCopy.trim(), x: getAlignedTextX(copyArea, alignments.mainAlign), baseline: mainBaseline, maxWidth, align: alignments.mainAlign, size: mainFontSize, weight: 700, color: MAIN_COPY_COLOR },
+      { label: "서브카피", text: activeSubCopy, x: getAlignedTextX(copyArea, alignments.subAlign), baseline: 174, maxWidth, align: alignments.subAlign, size: subFontSize, weight: 400, color: SUB_COPY_COLOR },
     ] satisfies CopyLine[];
   }
 
@@ -228,22 +282,28 @@ function getCopyLines(
   const rightX = SAFE_AREA.x + SAFE_AREA.width;
   const leftWidth = productBox.x - MIN_COPY_OBJECT_GAP - leftX;
   const rightWidth = rightX - (productBox.x + productBox.width + MIN_COPY_OBJECT_GAP);
+  const leftArea = { x: leftX, y: COPY_AREA.y, width: leftWidth, height: COPY_AREA.height };
+  const rightArea = { x: rightX - rightWidth, y: COPY_AREA.y, width: rightWidth, height: COPY_AREA.height };
+  const activeLeftSub = centerLeftSubEnabled ? centerLeftSub.trim() : "";
+  const activeRightSub = centerRightSubEnabled ? centerRightSub.trim() : "";
+  const leftMainBaseline = activeLeftSub ? 113 : 145;
+  const rightMainBaseline = activeRightSub ? 113 : 145;
   return [
     {
-      label: "좌측 메인카피", text: mainCopy.trim(), x: leftX, baseline: 118, maxWidth: leftWidth, align: "left",
-      size: MAIN_COPY_SIZE, weight: 700, color: MAIN_COPY_COLOR,
+      label: "좌측 메인카피", text: mainCopy.trim(), x: getAlignedTextX(leftArea, alignments.centerLeftMainAlign), baseline: leftMainBaseline, maxWidth: leftWidth, align: alignments.centerLeftMainAlign,
+      size: mainFontSize, weight: 700, color: MAIN_COPY_COLOR,
     },
     {
-      label: "좌측 서브카피", text: centerLeftSub.trim(), x: leftX, baseline: 166, maxWidth: leftWidth, align: "left",
-      size: SUB_COPY_SIZE, weight: 400, color: SUB_COPY_COLOR,
+      label: "좌측 서브카피", text: activeLeftSub, x: getAlignedTextX(leftArea, alignments.centerLeftSubAlign), baseline: 174, maxWidth: leftWidth, align: alignments.centerLeftSubAlign,
+      size: subFontSize, weight: 400, color: SUB_COPY_COLOR,
     },
     {
-      label: "우측 메인카피", text: subCopy.trim(), x: rightX, baseline: 118, maxWidth: rightWidth, align: "right",
-      size: MAIN_COPY_SIZE, weight: 700, color: MAIN_COPY_COLOR,
+      label: "우측 메인카피", text: subCopy.trim(), x: getAlignedTextX(rightArea, alignments.centerRightMainAlign), baseline: rightMainBaseline, maxWidth: rightWidth, align: alignments.centerRightMainAlign,
+      size: mainFontSize, weight: 700, color: MAIN_COPY_COLOR,
     },
     {
-      label: "우측 서브카피", text: centerRightSub.trim(), x: rightX, baseline: 166, maxWidth: rightWidth, align: "right",
-      size: SUB_COPY_SIZE, weight: 400, color: SUB_COPY_COLOR,
+      label: "우측 서브카피", text: activeRightSub, x: getAlignedTextX(rightArea, alignments.centerRightSubAlign), baseline: 174, maxWidth: rightWidth, align: alignments.centerRightSubAlign,
+      size: subFontSize, weight: 400, color: SUB_COPY_COLOR,
     },
   ] satisfies CopyLine[];
 }
@@ -476,6 +536,28 @@ function RangeField({ label, value, min, max, unit, onChange }: {
   );
 }
 
+function CopyAlignSelect({ label, value, disabled = false, onChange }: {
+  label: string;
+  value: CopyAlign;
+  disabled?: boolean;
+  onChange: (value: CopyAlign) => void;
+}) {
+  return (
+    <select
+      className="copy-align-select"
+      aria-label={`${label} 정렬`}
+      title={`${label} 정렬`}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value as CopyAlign)}
+    >
+      <option value="left">좌</option>
+      <option value="center">중앙</option>
+      <option value="right">우</option>
+    </select>
+  );
+}
+
 const TYPE_COPY = {
   badge: {
     number: "01",
@@ -509,6 +591,17 @@ export default function Home() {
   const [subCopy, setSubCopy] = useState("오늘만 10% 추가적립");
   const [centerLeftSub, setCenterLeftSub] = useState("오늘만 10% 추가적립");
   const [centerRightSub, setCenterRightSub] = useState("니니즈 스페셜 필로우");
+  const [subCopyEnabled, setSubCopyEnabled] = useState(true);
+  const [centerLeftSubEnabled, setCenterLeftSubEnabled] = useState(false);
+  const [centerRightSubEnabled, setCenterRightSubEnabled] = useState(false);
+  const [mainFontSize, setMainFontSize] = useState(DEFAULT_MAIN_FONT_SIZE);
+  const [subFontSize, setSubFontSize] = useState(DEFAULT_SUB_FONT_SIZE);
+  const [mainAlign, setMainAlign] = useState<CopyAlign>("left");
+  const [subAlign, setSubAlign] = useState<CopyAlign>("left");
+  const [centerLeftMainAlign, setCenterLeftMainAlign] = useState<CopyAlign>("left");
+  const [centerRightMainAlign, setCenterRightMainAlign] = useState<CopyAlign>("right");
+  const [centerLeftSubAlign, setCenterLeftSubAlign] = useState<CopyAlign>("left");
+  const [centerRightSubAlign, setCenterRightSubAlign] = useState<CopyAlign>("right");
   const [advertiserText, setAdvertiserText] = useState("J.ESTINA");
   const [badgeText, setBadgeText] = useState("10%");
   const [background, setBackground] = useState("#F5F5F5");
@@ -554,7 +647,9 @@ export default function Home() {
     if (product.image) drawContainedImage(ctx, product.image, productBox, productScale, productX, productY);
     if (product2.image) drawContainedImage(ctx, product2.image, productBox, product2Scale, product2X, product2Y);
 
-    const copyLines = getCopyLines(ctx, template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub);
+    const copyLines = getCopyLines(ctx, template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize, {
+      mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
+    });
     for (const line of copyLines) {
       if (!line.text) continue;
       ctx.fillStyle = line.color;
@@ -588,7 +683,7 @@ export default function Home() {
     } else {
       drawAdvertiser(ctx, advertiser, advertiserText, SAFE_AREA.x + SAFE_AREA.width - 2, 42, "right");
     }
-  }, [advertiser, advertiserText, badgeText, bg, centerLeftSub, centerRightSub, flagColor, fontsReady, mainCopy, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subCopy, template]);
+  }, [advertiser, advertiserText, badgeText, bg, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, flagColor, fontsReady, mainAlign, mainCopy, mainFontSize, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subAlign, subCopy, subCopyEnabled, subFontSize, template]);
 
   const validateLayout = useCallback((ctx: CanvasRenderingContext2D) => {
     const issues: string[] = [];
@@ -603,13 +698,15 @@ export default function Home() {
       issues.push("두 이미지를 합친 오브젝트 그룹이 최대 438×258을 초과합니다.");
     }
 
-    const lines = getCopyLines(ctx, template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub);
+    const lines = getCopyLines(ctx, template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize, {
+      mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
+    });
     let spacingIssue = false;
     for (const line of lines) {
       if (!line.text) continue;
       const lineRect = measureCopyLine(ctx, line);
       if (lineRect.width > line.maxWidth + .5 || !containsRect(COPY_AREA, lineRect)) {
-        issues.push(`${line.label}가 1줄 허용영역을 벗어납니다. 현재 권장 기본값(메인 48pt·서브 39pt)에 맞게 문구를 줄여주세요.`);
+        issues.push(`${line.label}가 ${line.size}pt에서 1줄 허용영역을 벗어납니다. 문구를 줄이거나 글자 크기를 조정하세요.`);
       }
       if (combinedRect && horizontalGap(lineRect, combinedRect) < MIN_COPY_OBJECT_GAP) spacingIssue = true;
     }
@@ -636,13 +733,13 @@ export default function Home() {
       }
     }
     return Array.from(new Set(issues));
-  }, [badgeText, centerLeftSub, centerRightSub, mainCopy, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subCopy, template]);
+  }, [badgeText, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, mainAlign, mainCopy, mainFontSize, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subAlign, subCopy, subCopyEnabled, subFontSize, template]);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      document.fonts.load("400 39px Pretendard"),
-      document.fonts.load("700 48px Pretendard"),
+      document.fonts.load(`400 ${COPY_FONT_MAX}px Pretendard`),
+      document.fonts.load(`700 ${COPY_FONT_MAX}px Pretendard`),
       document.fonts.load("800 26px Pretendard"),
     ]).finally(() => {
       if (!cancelled) setFontsReady(true);
@@ -736,12 +833,16 @@ export default function Home() {
     const timer = window.setTimeout(() => {
       const currentDraft: TemplateDraft = {
         objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
+        subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize,
+        mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
         background, textColor, badgeColor, productScale, productX, productY,
         product2Scale, product2X, product2Y, activeProduct, groupScaleOffset,
       };
       templateDraftsRef.current[template] = currentDraft;
       const settings: Settings = {
         template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
+        subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize,
+        mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
         background, textColor, badgeColor, productScale, productX, productY,
         product2Scale, product2X, product2Y, activeProduct, groupScaleOffset, showGuides, inquiry,
         templateDrafts: {
@@ -756,7 +857,7 @@ export default function Home() {
       window.clearTimeout(savingTimer);
       window.clearTimeout(timer);
     };
-  }, [activeProduct, advertiserText, background, badgeColor, badgeText, centerLeftSub, centerRightSub, draftReady, groupScaleOffset, inquiry, mainCopy, objectSide, product2Scale, product2X, product2Y, productScale, productX, productY, showGuides, subCopy, template, textColor]);
+  }, [activeProduct, advertiserText, background, badgeColor, badgeText, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, draftReady, groupScaleOffset, inquiry, mainAlign, mainCopy, mainFontSize, objectSide, product2Scale, product2X, product2Y, productScale, productX, productY, showGuides, subAlign, subCopy, subCopyEnabled, subFontSize, template, textColor]);
 
   function setAsset(key: AssetKey, file?: File) {
     if (!file || !file.type.startsWith("image/")) return;
@@ -805,6 +906,8 @@ export default function Home() {
   function currentTemplateDraft(): TemplateDraft {
     return {
       objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, advertiserText, badgeText,
+      subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize,
+      mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
       background, textColor, badgeColor, productScale, productX, productY,
       product2Scale, product2X, product2Y, activeProduct, groupScaleOffset,
     };
@@ -816,6 +919,17 @@ export default function Home() {
     setSubCopy(draft.subCopy);
     setCenterLeftSub(draft.centerLeftSub);
     setCenterRightSub(draft.centerRightSub);
+    setSubCopyEnabled(draft.subCopyEnabled);
+    setCenterLeftSubEnabled(draft.centerLeftSubEnabled);
+    setCenterRightSubEnabled(draft.centerRightSubEnabled);
+    setMainFontSize(Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, draft.mainFontSize)));
+    setSubFontSize(Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, draft.subFontSize)));
+    setMainAlign(draft.mainAlign);
+    setSubAlign(draft.subAlign);
+    setCenterLeftMainAlign(draft.centerLeftMainAlign);
+    setCenterRightMainAlign(draft.centerRightMainAlign);
+    setCenterLeftSubAlign(draft.centerLeftSubAlign);
+    setCenterRightSubAlign(draft.centerRightSubAlign);
     setAdvertiserText(draft.advertiserText);
     setBadgeText(draft.badgeText);
     setBackground(draft.background);
@@ -968,6 +1082,17 @@ export default function Home() {
     setSubCopy("오늘만 10% 추가적립");
     setCenterLeftSub("");
     setCenterRightSub("");
+    setSubCopyEnabled(true);
+    setCenterLeftSubEnabled(false);
+    setCenterRightSubEnabled(false);
+    setMainFontSize(DEFAULT_MAIN_FONT_SIZE);
+    setSubFontSize(DEFAULT_SUB_FONT_SIZE);
+    setMainAlign("left");
+    setSubAlign("left");
+    setCenterLeftMainAlign("left");
+    setCenterRightMainAlign("right");
+    setCenterLeftSubAlign("left");
+    setCenterRightSubAlign("right");
     setAdvertiserText("J.ESTINA");
     setBadgeText("10%");
     setBackground("#F5F5F5");
@@ -1150,19 +1275,25 @@ export default function Home() {
           <div className="preview-panel">
             <div className="preview-title"><div><span>LIVE PREVIEW</span><h3>{typeInfo.title}</h3></div>{template === "center" && <span className="center-area-chip">좌측 카피 · 중앙 오브젝트 · 우측 카피</span>}<label><input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> 가이드 영역</label></div>
             <div className="preview-copy-editor">
-              <div className="preview-copy-heading"><strong>카피 바로 입력</strong><span>{template === "center" ? "권장 기본값 메인 48pt · 서브 39pt · 좌우 동일 스타일" : "권장 기본값 메인 48pt · 서브 39pt · 각 1줄"}</span></div>
+              <div className="preview-copy-heading">
+                <div><strong>카피 바로 입력</strong><span>메인·서브 각각 39~51pt · 1pt 단위</span></div>
+                <div className="copy-size-controls" aria-label="카피 글자 크기 조절">
+                  <label><span>메인</span><input type="range" min={COPY_FONT_MIN} max={COPY_FONT_MAX} step={1} value={mainFontSize} aria-label={`메인카피 글자 크기 ${mainFontSize}pt`} onChange={(event) => setMainFontSize(Number(event.target.value))} /><b>{mainFontSize}pt</b></label>
+                  <label><span>서브</span><input type="range" min={COPY_FONT_MIN} max={COPY_FONT_MAX} step={1} value={subFontSize} aria-label={`서브카피 글자 크기 ${subFontSize}pt`} onChange={(event) => setSubFontSize(Number(event.target.value))} /><b>{subFontSize}pt</b></label>
+                </div>
+              </div>
               <div className={`preview-copy-grid ${template}`}>
                 {template === "center" ? (
                   <>
-                    <label><span>좌측 메인</span><input value={mainCopy} onChange={(event) => setMainCopy(event.target.value)} /></label>
-                    <label><span>우측 메인</span><input value={subCopy} onChange={(event) => setSubCopy(event.target.value)} /></label>
-                    <label><span>좌측 서브 <em>선택</em></span><input value={centerLeftSub} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterLeftSub(event.target.value)} /></label>
-                    <label><span>우측 서브 <em>선택</em></span><input value={centerRightSub} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterRightSub(event.target.value)} /></label>
+                    <div className="copy-control-field"><label><span>좌측 메인</span><input value={mainCopy} onChange={(event) => setMainCopy(event.target.value)} /></label><CopyAlignSelect label="좌측 메인카피" value={centerLeftMainAlign} onChange={setCenterLeftMainAlign} /></div>
+                    <div className="copy-control-field"><label><span>우측 메인</span><input value={subCopy} onChange={(event) => setSubCopy(event.target.value)} /></label><CopyAlignSelect label="우측 메인카피" value={centerRightMainAlign} onChange={setCenterRightMainAlign} /></div>
+                    <div className={`copy-control-field ${centerLeftSubEnabled ? "" : "off"}`}><label><span>좌측 서브</span><input value={centerLeftSub} disabled={!centerLeftSubEnabled} placeholder="서브카피를 켜주세요" onChange={(event) => setCenterLeftSub(event.target.value)} /></label><div className="copy-field-actions"><button className="copy-use-toggle" type="button" aria-pressed={centerLeftSubEnabled} onClick={() => setCenterLeftSubEnabled((enabled) => !enabled)}>{centerLeftSubEnabled ? "ON" : "OFF"}</button><CopyAlignSelect label="좌측 서브카피" value={centerLeftSubAlign} disabled={!centerLeftSubEnabled} onChange={setCenterLeftSubAlign} /></div></div>
+                    <div className={`copy-control-field ${centerRightSubEnabled ? "" : "off"}`}><label><span>우측 서브</span><input value={centerRightSub} disabled={!centerRightSubEnabled} placeholder="서브카피를 켜주세요" onChange={(event) => setCenterRightSub(event.target.value)} /></label><div className="copy-field-actions"><button className="copy-use-toggle" type="button" aria-pressed={centerRightSubEnabled} onClick={() => setCenterRightSubEnabled((enabled) => !enabled)}>{centerRightSubEnabled ? "ON" : "OFF"}</button><CopyAlignSelect label="우측 서브카피" value={centerRightSubAlign} disabled={!centerRightSubEnabled} onChange={setCenterRightSubAlign} /></div></div>
                   </>
                 ) : (
                   <>
-                    <label><span>메인카피</span><input value={mainCopy} onChange={(event) => setMainCopy(event.target.value)} /></label>
-                    <label><span>서브카피 <em>선택</em></span><input value={subCopy} placeholder="입력하지 않아도 됩니다" onChange={(event) => setSubCopy(event.target.value)} /></label>
+                    <div className="copy-control-field"><label><span>메인카피</span><input value={mainCopy} onChange={(event) => setMainCopy(event.target.value)} /></label><CopyAlignSelect label="메인카피" value={mainAlign} onChange={setMainAlign} /></div>
+                    <div className={`copy-control-field ${subCopyEnabled ? "" : "off"}`}><label><span>서브카피</span><input value={subCopy} disabled={!subCopyEnabled} placeholder="서브카피를 켜주세요" onChange={(event) => setSubCopy(event.target.value)} /></label><div className="copy-field-actions"><button className="copy-use-toggle" type="button" aria-pressed={subCopyEnabled} onClick={() => setSubCopyEnabled((enabled) => !enabled)}>{subCopyEnabled ? "ON" : "OFF"}</button><CopyAlignSelect label="서브카피" value={subAlign} disabled={!subCopyEnabled} onChange={setSubAlign} /></div></div>
                   </>
                 )}
               </div>
@@ -1246,7 +1377,7 @@ export default function Home() {
         <div className="section-heading light"><span>GUIDE</span><div><h2 id="guide-title">{typeInfo.title} 제작 가이드</h2><p>현재 선택한 유형에 적용되는 핵심 심사 기준입니다.</p></div></div>
         <div className="guide-cards">
           <article><span>01</span><h3>광고주체 표기</h3>{template === "badge" ? <ul><li>기존 오브젝트 영역 안에서 반드시 표기합니다.</li><li>오브젝트 좌·우 정렬에 맞춰 하단 끝에 배치합니다.</li><li>카피·오브젝트의 가독성을 침범하지 않는 크기로 구성합니다.</li></ul> : <ul><li>중앙 오브젝트형에 한해 카피 영역 내 표기가 허용됩니다.</li><li>지정 영역 좌측 최상단 또는 우측 최상단 정렬만 가능합니다.</li><li>영역 내 자유 배치나 카피·오브젝트와의 밀착은 불가합니다.</li></ul>}</article>
-          <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>오픈스타일 가이드에는 고정된 pt 범위가 별도로 없습니다.</li><li>메이커 권장 기본값은 메인 Pretendard Bold 48pt, #4C4C4C입니다.</li><li>서브 권장 기본값은 Pretendard Regular 39pt, #777777입니다.</li><li>배지 플래그는 1어절이며 %, !, + 외 특수기호는 불가합니다.</li></ul> : <ul><li>오픈스타일 가이드에는 고정된 pt 범위가 별도로 없습니다.</li><li>메이커 권장 기본값은 메인 Pretendard Bold 48pt, 서브 Regular 39pt입니다.</li><li>같은 카피 유형은 좌우 모두 크기·굵기·색상을 동일하게 적용합니다.</li><li>각 카피는 영역 안에서 오브젝트와 균형 있게 구성합니다.</li></ul>}</article>
+          <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>메인·서브 카피는 각각 최대 1줄입니다.</li><li>메인은 Pretendard Bold, 39~51pt, #4C4C4C입니다.</li><li>서브는 Pretendard Regular, 39~51pt, #777777입니다.</li><li>서브는 ON/OFF할 수 있으며 배지 플래그는 1어절로 구성합니다.</li></ul> : <ul><li>좌·우 메인과 좌·우 서브는 각각 최대 1줄입니다.</li><li>메인·서브 모두 39~51pt 범위에서 1pt 단위로 조절합니다.</li><li>같은 카피 유형은 좌우 크기·굵기·색상을 동일하게 적용합니다.</li><li>좌·우 서브는 각각 ON/OFF하고 모든 카피의 정렬을 선택할 수 있습니다.</li></ul>}</article>
           <article><span>03</span><h3>오브젝트·출력 가이드</h3>{template === "badge" ? <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트는 좌측 또는 우측에 두며 중앙 배열은 불가합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>카피와 오브젝트 사이 최소 33px을 확보합니다.</li></ul> : <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트 그룹을 소재 중앙 최대영역 안에 배치합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>좌우 카피와 오브젝트 사이 최소 33px을 확보합니다.</li></ul>}</article>
         </div>
         <p className="review-note"><b>심사 유의사항</b> PNG-24/32, 300KB 이하로 등록해야 합니다. 본 완화 가이드는 카카오 제공 PSD 템플릿 사용을 전제로 하므로 최종 집행 전 PSD 템플릿과 모먼트 에셋 기준을 함께 확인하세요.</p>
