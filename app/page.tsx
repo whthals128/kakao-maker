@@ -22,6 +22,8 @@ type TemplateType = "badge" | "center";
 type ObjectSide = "left" | "right";
 type AssetKey = "product" | "product2" | "advertiser";
 type ActiveLayer = "product" | "product2" | "both";
+type ProductLayer = "product" | "product2";
+type Rect = { x: number; y: number; width: number; height: number };
 type AssetState = { file: File | null; image: HTMLImageElement | null; url: string };
 type StoredAsset = { blob: Blob; name: string; type: string };
 type Settings = {
@@ -163,6 +165,32 @@ function drawContainedImage(
   ctx.restore();
 }
 
+function getVisibleImageRect(
+  image: HTMLImageElement | null,
+  box: Rect,
+  scalePercent: number,
+  offsetX: number,
+  offsetY: number,
+) {
+  if (!image) return null;
+  const baseScale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
+  const scale = baseScale * (scalePercent / 100);
+  const width = image.naturalWidth * scale;
+  const height = image.naturalHeight * scale;
+  const imageX = box.x + (box.width - width) / 2 + offsetX;
+  const imageY = box.y + (box.height - height) / 2 + offsetY;
+  const left = Math.max(box.x, imageX);
+  const top = Math.max(box.y, imageY);
+  const right = Math.min(box.x + box.width, imageX + width);
+  const bottom = Math.min(box.y + box.height, imageY + height);
+  if (right <= left || bottom <= top) return null;
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+function pointInRect(x: number, y: number, rect: Rect | null) {
+  return Boolean(rect && x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height);
+}
+
 function drawAdvertiser(
   ctx: CanvasRenderingContext2D,
   asset: AssetState,
@@ -292,7 +320,7 @@ const TYPE_COPY = {
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin1X: number; origin1Y: number; origin2X: number; origin2Y: number; layer: ActiveLayer } | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin1X: number; origin1Y: number; origin2X: number; origin2Y: number; layer: ActiveLayer; moved: boolean; cycleOnClick: boolean } | null>(null);
   const [template, setTemplate] = useState<TemplateType>("badge");
   const [objectSide, setObjectSide] = useState<ObjectSide>("right");
   const [product, setProduct] = useState<AssetState>(EMPTY_ASSET);
@@ -325,6 +353,13 @@ export default function Home() {
   const bg = normalizeHex(background, "#F5F5F5");
   const copyColor = normalizeHex(textColor, "#4C4C4C");
   const flagColor = normalizeHex(badgeColor, "#FF3B00");
+  const currentProductBox: Rect = template === "center"
+    ? { x: 248, y: 0, width: 438, height: 258 }
+    : objectSide === "right"
+      ? { x: 544, y: 0, width: 342, height: 258 }
+      : { x: 47, y: 0, width: 342, height: 258 };
+  const productRect = getVisibleImageRect(product.image, currentProductBox, productScale, productX, productY);
+  const product2Rect = getVisibleImageRect(product2.image, currentProductBox, product2Scale, product2X, product2Y);
 
   const draw = useCallback(() => {
     if (!fontsReady) return;
@@ -574,15 +609,35 @@ export default function Home() {
   }
 
   function startObjectDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    const layer: ActiveLayer | null = activeProduct === "both" && product.image && product2.image
-      ? "both"
-      : activeProduct === "product2" && product2.image
-        ? "product2"
-        : product.image
-          ? "product"
-          : product2.image
-            ? "product2"
-            : null;
+    const surface = event.currentTarget.getBoundingClientRect();
+    const pointX = (event.clientX - surface.left) * (WIDTH / surface.width);
+    const pointY = (event.clientY - surface.top) * (HEIGHT / surface.height);
+    const hitLayers: ProductLayer[] = [];
+    if (pointInRect(pointX, pointY, productRect)) hitLayers.push("product");
+    if (pointInRect(pointX, pointY, product2Rect)) hitLayers.push("product2");
+
+    let layer: ActiveLayer | null = null;
+    let cycleOnClick = false;
+    if (hitLayers.length === 1) {
+      layer = hitLayers[0];
+    } else if (hitLayers.length === 2) {
+      if (activeProduct === "product" || activeProduct === "product2") {
+        layer = activeProduct;
+        cycleOnClick = true;
+      } else {
+        layer = "product2";
+      }
+    } else {
+      layer = activeProduct === "both" && product.image && product2.image
+        ? "both"
+        : activeProduct === "product2" && product2.image
+          ? "product2"
+          : product.image
+            ? "product"
+            : product2.image
+              ? "product2"
+              : null;
+    }
     if (!layer) return;
     dragRef.current = {
       pointerId: event.pointerId,
@@ -593,6 +648,8 @@ export default function Home() {
       origin2X: product2X,
       origin2Y: product2Y,
       layer,
+      moved: false,
+      cycleOnClick,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     setActiveProduct(layer);
@@ -606,6 +663,7 @@ export default function Home() {
     const rect = event.currentTarget.getBoundingClientRect();
     const deltaX = (event.clientX - drag.startX) * (WIDTH / rect.width);
     const deltaY = (event.clientY - drag.startY) * (HEIGHT / rect.height);
+    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) drag.moved = true;
     if (drag.layer === "product" || drag.layer === "both") {
       setProductX(Math.round(Math.max(-120, Math.min(120, drag.origin1X + deltaX))));
       setProductY(Math.round(Math.max(-90, Math.min(90, drag.origin1Y + deltaY))));
@@ -617,7 +675,11 @@ export default function Home() {
   }
 
   function endObjectDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    if (dragRef.current?.pointerId !== event.pointerId) return;
+    const drag = dragRef.current;
+    if (drag?.pointerId !== event.pointerId) return;
+    if (!drag.moved && drag.cycleOnClick) {
+      setActiveProduct(drag.layer === "product" ? "product2" : "product");
+    }
     dragRef.current = null;
     setIsDragging(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -755,29 +817,6 @@ export default function Home() {
               </div>
             )}
 
-            <div className="field-block">
-              <div className="field-heading"><div><strong>{template === "center" ? "좌·우 카피" : "카피"}</strong><span>{template === "center" ? "각각 메인 1줄 · 서브 1줄(선택)" : "메인 1줄 · 서브 1줄"}</span></div></div>
-              {template === "center" ? (
-                <>
-                  <div className="copy-side-group">
-                    <strong>좌측 카피</strong>
-                    <label className="text-input"><span>메인</span><input value={mainCopy} maxLength={30} onChange={(event) => setMainCopy(event.target.value)} /></label>
-                    <label className="text-input"><span>서브(선택)</span><input value={centerLeftSub} maxLength={30} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterLeftSub(event.target.value)} /></label>
-                  </div>
-                  <div className="copy-side-group">
-                    <strong>우측 카피</strong>
-                    <label className="text-input"><span>메인</span><input value={subCopy} maxLength={30} onChange={(event) => setSubCopy(event.target.value)} /></label>
-                    <label className="text-input"><span>서브(선택)</span><input value={centerRightSub} maxLength={30} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterRightSub(event.target.value)} /></label>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <label className="text-input"><span>메인</span><input value={mainCopy} maxLength={30} onChange={(event) => setMainCopy(event.target.value)} /></label>
-                  <label className="text-input"><span>서브</span><input value={subCopy} maxLength={30} onChange={(event) => setSubCopy(event.target.value)} /></label>
-                </>
-              )}
-            </div>
-
             {template === "badge" && (
               <div className="field-block">
                 <div className="field-heading"><div><strong>배지 플래그</strong><span>혜택 정보 한 어절</span></div></div>
@@ -802,6 +841,24 @@ export default function Home() {
 
           <div className="preview-panel">
             <div className="preview-title"><div><span>LIVE PREVIEW</span><h3>{typeInfo.title}</h3></div>{template === "center" && <span className="center-area-chip">좌측 카피 · 중앙 오브젝트 · 우측 카피</span>}<label><input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> 가이드 영역</label></div>
+            <div className="preview-copy-editor">
+              <div className="preview-copy-heading"><strong>카피 바로 입력</strong><span>입력 즉시 미리보기에 반영됩니다</span></div>
+              <div className={`preview-copy-grid ${template}`}>
+                {template === "center" ? (
+                  <>
+                    <label><span>좌측 메인</span><input value={mainCopy} maxLength={30} onChange={(event) => setMainCopy(event.target.value)} /></label>
+                    <label><span>좌측 서브 <em>선택</em></span><input value={centerLeftSub} maxLength={30} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterLeftSub(event.target.value)} /></label>
+                    <label><span>우측 메인</span><input value={subCopy} maxLength={30} onChange={(event) => setSubCopy(event.target.value)} /></label>
+                    <label><span>우측 서브 <em>선택</em></span><input value={centerRightSub} maxLength={30} placeholder="입력하지 않아도 됩니다" onChange={(event) => setCenterRightSub(event.target.value)} /></label>
+                  </>
+                ) : (
+                  <>
+                    <label><span>메인카피</span><input value={mainCopy} maxLength={30} onChange={(event) => setMainCopy(event.target.value)} /></label>
+                    <label><span>서브카피</span><input value={subCopy} maxLength={30} onChange={(event) => setSubCopy(event.target.value)} /></label>
+                  </>
+                )}
+              </div>
+            </div>
             <div className="drag-toolbar">
               <span>미리보기에서 이동할 이미지</span>
               <div className="layer-selector">
@@ -814,7 +871,7 @@ export default function Home() {
                 <b>{activeProduct === "product" ? productScale : activeProduct === "product2" ? product2Scale : `${productScale}·${product2Scale}`}%</b>
                 <button type="button" onClick={() => zoomActive(5)} aria-label="선택 이미지 확대">+</button>
               </div>
-              <small>드래그로 이동 · 마우스 휠 또는 −/+로 확대</small>
+              <small>이미지를 클릭해 선택 · 겹친 곳은 반복 클릭 · 드래그로 이동</small>
             </div>
             <div className="preview-stage">
               <div className="creative-frame">
@@ -841,6 +898,12 @@ export default function Home() {
                     <div className="guide-ad"><span>광고주체</span></div>
                     {template === "badge" && <div className="guide-flag"><span>배지</span></div>}
                   </div>
+                )}
+                {(activeProduct === "product" || activeProduct === "both") && productRect && (
+                  <div className="image-selection image-one" style={{ left: `${productRect.x / WIDTH * 100}%`, top: `${productRect.y / HEIGHT * 100}%`, width: `${productRect.width / WIDTH * 100}%`, height: `${productRect.height / HEIGHT * 100}%` }}><span>이미지 1 선택</span></div>
+                )}
+                {(activeProduct === "product2" || activeProduct === "both") && product2Rect && (
+                  <div className="image-selection image-two" style={{ left: `${product2Rect.x / WIDTH * 100}%`, top: `${product2Rect.y / HEIGHT * 100}%`, width: `${product2Rect.width / WIDTH * 100}%`, height: `${product2Rect.height / HEIGHT * 100}%` }}><span>이미지 2 선택</span></div>
                 )}
               </div>
             </div>
