@@ -17,6 +17,8 @@ const HEIGHT = 258;
 const SAFE_AREA: Rect = { x: 48, y: 0, width: 933, height: 258 };
 const COPY_AREA: Rect = { x: 48, y: 51, width: 933, height: 156 };
 const OBJECT_MAX_WIDTH = 438;
+const CENTER_OBJECT_MIN_WIDTH = 220;
+const DEFAULT_CENTER_OBJECT_WIDTH = 280;
 const MIN_COPY_OBJECT_GAP = 33;
 const MAX_FILE_BYTES = 300 * 1024;
 const MAIN_COPY_COLOR = "#4C4C4C";
@@ -90,6 +92,7 @@ type TemplateDraft = {
   product2Y: number;
   activeProduct: ActiveLayer;
   groupScaleOffset: number;
+  centerObjectWidth: number;
 };
 type Settings = {
   template: TemplateType;
@@ -123,6 +126,7 @@ type Settings = {
   product2Y: number;
   activeProduct: ActiveLayer;
   groupScaleOffset: number;
+  centerObjectWidth: number;
   showGuides: boolean;
   inquiry: string;
   advertiserImageEnabled: boolean;
@@ -139,7 +143,7 @@ const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
     centerLeftSubAlign: "left", centerRightSubAlign: "right",
     badgeText: "10%", background: "#F5F5F5", textColor: "#4C4C4C", badgeColor: "#FF3B00",
     productScale: 100, productX: 0, productY: 0, product2Scale: 82, product2X: 62, product2Y: 18,
-    activeProduct: "product", groupScaleOffset: 0,
+    activeProduct: "product", groupScaleOffset: 0, centerObjectWidth: OBJECT_MAX_WIDTH,
   },
   center: {
     objectSide: "right", mainCopy: "쫀득쫀득", subCopy: "바디필로우",
@@ -150,7 +154,7 @@ const DEFAULT_TEMPLATE_DRAFTS: Record<TemplateType, TemplateDraft> = {
     centerLeftSubAlign: "left", centerRightSubAlign: "right",
     badgeText: "10%", background: "#F5F5F5", textColor: "#4C4C4C", badgeColor: "#FF3B00",
     productScale: 100, productX: 0, productY: 0, product2Scale: 82, product2X: 62, product2Y: 18,
-    activeProduct: "product", groupScaleOffset: 0,
+    activeProduct: "product", groupScaleOffset: 0, centerObjectWidth: DEFAULT_CENTER_OBJECT_WIDTH,
   },
 };
 
@@ -163,6 +167,7 @@ function mergeTemplateDraft(template: TemplateType, saved: Partial<TemplateDraft
   const merged = { ...fallback, ...saved };
   const mainSize = Number(merged.mainFontSize);
   const subSize = Number(merged.subFontSize);
+  const centerWidth = Number(merged.centerObjectWidth);
   return {
     ...merged,
     subCopyEnabled: typeof saved.subCopyEnabled === "boolean" ? saved.subCopyEnabled : Boolean(merged.subCopy.trim()),
@@ -171,6 +176,7 @@ function mergeTemplateDraft(template: TemplateType, saved: Partial<TemplateDraft
     badgeEnabled: typeof saved.badgeEnabled === "boolean" ? saved.badgeEnabled : fallback.badgeEnabled,
     mainFontSize: Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, Number.isFinite(mainSize) ? mainSize : fallback.mainFontSize)),
     subFontSize: Math.max(COPY_FONT_MIN, Math.min(COPY_FONT_MAX, Number.isFinite(subSize) ? subSize : fallback.subFontSize)),
+    centerObjectWidth: Math.max(CENTER_OBJECT_MIN_WIDTH, Math.min(OBJECT_MAX_WIDTH, Number.isFinite(centerWidth) ? centerWidth : fallback.centerObjectWidth)),
     mainAlign: normalizeCopyAlign(merged.mainAlign, fallback.mainAlign),
     subAlign: normalizeCopyAlign(merged.subAlign, fallback.subAlign),
     centerLeftMainAlign: normalizeCopyAlign(merged.centerLeftMainAlign, fallback.centerLeftMainAlign),
@@ -273,9 +279,10 @@ async function clearAssets() {
   database.close();
 }
 
-function getProductBox(template: TemplateType, objectSide: ObjectSide): Rect {
+function getProductBox(template: TemplateType, objectSide: ObjectSide, centerObjectWidth = DEFAULT_CENTER_OBJECT_WIDTH): Rect {
   if (template === "center") {
-    return { x: Math.round((WIDTH - OBJECT_MAX_WIDTH) / 2), y: 0, width: OBJECT_MAX_WIDTH, height: HEIGHT };
+    const width = Math.max(CENTER_OBJECT_MIN_WIDTH, Math.min(OBJECT_MAX_WIDTH, centerObjectWidth));
+    return { x: Math.round((WIDTH - width) / 2), y: 0, width, height: HEIGHT };
   }
   return objectSide === "right"
     ? { x: SAFE_AREA.x + SAFE_AREA.width - OBJECT_MAX_WIDTH, y: 0, width: OBJECT_MAX_WIDTH, height: HEIGHT }
@@ -300,6 +307,7 @@ function getCopyLines(
   centerRightSubEnabled: boolean,
   mainFontSize: number,
   subFontSize: number,
+  centerObjectWidth: number,
   alignments: CopyAlignmentSettings,
 ) {
   if (template === "badge") {
@@ -317,7 +325,7 @@ function getCopyLines(
     ] satisfies CopyLine[];
   }
 
-  const productBox = getProductBox(template, objectSide);
+  const productBox = getProductBox(template, objectSide, centerObjectWidth);
   const leftX = SAFE_AREA.x;
   const rightX = SAFE_AREA.x + SAFE_AREA.width;
   const leftWidth = productBox.x - MIN_COPY_OBJECT_GAP - leftX;
@@ -620,6 +628,7 @@ export default function Home() {
   const [product2Y, setProduct2Y] = useState(18);
   const [activeProduct, setActiveProduct] = useState<ActiveLayer>("product");
   const [groupScaleOffset, setGroupScaleOffset] = useState(0);
+  const [centerObjectWidth, setCenterObjectWidth] = useState(DEFAULT_TEMPLATE_DRAFTS.badge.centerObjectWidth);
   const [isDragging, setIsDragging] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   const [showGuides, setShowGuides] = useState(true);
@@ -632,7 +641,8 @@ export default function Home() {
 
   const bg = normalizeHex(background, "#F5F5F5");
   const flagColor = normalizeHex(badgeColor, "#FF3B00");
-  const currentProductBox = getProductBox(template, objectSide);
+  const currentProductBox = getProductBox(template, objectSide, centerObjectWidth);
+  const centerCopyWidth = Math.round(currentProductBox.x - MIN_COPY_OBJECT_GAP - SAFE_AREA.x);
   const productRect = getVisibleImageRect(product.image, currentProductBox, productScale, productX, productY);
   const product2Rect = getVisibleImageRect(product2.image, currentProductBox, product2Scale, product2X, product2Y);
 
@@ -648,11 +658,11 @@ export default function Home() {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    const productBox = getProductBox(template, objectSide);
+    const productBox = getProductBox(template, objectSide, centerObjectWidth);
     if (product.image) drawContainedImage(ctx, product.image, productBox, productScale, productX, productY);
     if (product2.image) drawContainedImage(ctx, product2.image, productBox, product2Scale, product2X, product2Y);
 
-    const copyLines = getCopyLines(ctx, template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize, {
+    const copyLines = getCopyLines(ctx, template, objectSide, mainCopy, subCopy, centerLeftSub, centerRightSub, subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, mainFontSize, subFontSize, centerObjectWidth, {
       mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
     });
     for (const line of copyLines) {
@@ -693,11 +703,11 @@ export default function Home() {
     } else {
       drawAdvertiser(ctx, advertiser, advertiserText, SAFE_AREA.x + SAFE_AREA.width - 2, 42, "right");
     }
-  }, [advertiser, advertiserText, badgeEnabled, badgeText, bg, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, flagColor, fontsReady, mainAlign, mainCopy, mainFontSize, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subAlign, subCopy, subCopyEnabled, subFontSize, template]);
+  }, [advertiser, advertiserText, badgeEnabled, badgeText, bg, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerObjectWidth, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, flagColor, fontsReady, mainAlign, mainCopy, mainFontSize, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, subAlign, subCopy, subCopyEnabled, subFontSize, template]);
 
   const validateLayout = useCallback(() => {
     const issues: string[] = [];
-    const productBox = getProductBox(template, objectSide);
+    const productBox = getProductBox(template, objectSide, centerObjectWidth);
     const firstRect = getVisibleImageRect(product.image, productBox, productScale, productX, productY);
     const secondRect = getVisibleImageRect(product2.image, productBox, product2Scale, product2X, product2Y);
 
@@ -718,7 +728,7 @@ export default function Home() {
       }
     }
     return Array.from(new Set(issues));
-  }, [badgeEnabled, badgeText, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, template]);
+  }, [badgeEnabled, badgeText, centerObjectWidth, objectSide, product.image, product2.image, product2Scale, product2X, product2Y, productScale, productX, productY, template]);
 
   useEffect(() => {
     let cancelled = false;
@@ -822,7 +832,7 @@ export default function Home() {
         subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, badgeEnabled, mainFontSize, subFontSize,
         mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
         background, textColor, badgeColor, productScale, productX, productY,
-        product2Scale, product2X, product2Y, activeProduct, groupScaleOffset,
+        product2Scale, product2X, product2Y, activeProduct, groupScaleOffset, centerObjectWidth,
       };
       templateDraftsRef.current[template] = currentDraft;
       const settings: Settings = {
@@ -830,7 +840,7 @@ export default function Home() {
         subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, badgeEnabled, mainFontSize, subFontSize,
         mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
         background, textColor, badgeColor, productScale, productX, productY,
-        product2Scale, product2X, product2Y, activeProduct, groupScaleOffset, showGuides, inquiry, advertiserImageEnabled,
+        product2Scale, product2X, product2Y, activeProduct, groupScaleOffset, centerObjectWidth, showGuides, inquiry, advertiserImageEnabled,
         templateDrafts: {
           badge: { ...templateDraftsRef.current.badge },
           center: { ...templateDraftsRef.current.center },
@@ -843,7 +853,7 @@ export default function Home() {
       window.clearTimeout(savingTimer);
       window.clearTimeout(timer);
     };
-  }, [activeProduct, advertiserImageEnabled, advertiserText, background, badgeColor, badgeEnabled, badgeText, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, draftReady, groupScaleOffset, inquiry, mainAlign, mainCopy, mainFontSize, objectSide, product2Scale, product2X, product2Y, productScale, productX, productY, showGuides, subAlign, subCopy, subCopyEnabled, subFontSize, template, textColor]);
+  }, [activeProduct, advertiserImageEnabled, advertiserText, background, badgeColor, badgeEnabled, badgeText, centerLeftMainAlign, centerLeftSub, centerLeftSubAlign, centerLeftSubEnabled, centerObjectWidth, centerRightMainAlign, centerRightSub, centerRightSubAlign, centerRightSubEnabled, draftReady, groupScaleOffset, inquiry, mainAlign, mainCopy, mainFontSize, objectSide, product2Scale, product2X, product2Y, productScale, productX, productY, showGuides, subAlign, subCopy, subCopyEnabled, subFontSize, template, textColor]);
 
   function setAsset(key: AssetKey, file?: File) {
     if (!file || !file.type.startsWith("image/")) return;
@@ -936,7 +946,7 @@ export default function Home() {
       subCopyEnabled, centerLeftSubEnabled, centerRightSubEnabled, badgeEnabled, mainFontSize, subFontSize,
       mainAlign, subAlign, centerLeftMainAlign, centerRightMainAlign, centerLeftSubAlign, centerRightSubAlign,
       background, textColor, badgeColor, productScale, productX, productY,
-      product2Scale, product2X, product2Y, activeProduct, groupScaleOffset,
+      product2Scale, product2X, product2Y, activeProduct, groupScaleOffset, centerObjectWidth,
     };
   }
 
@@ -971,6 +981,7 @@ export default function Home() {
     setProduct2Y(draft.product2Y);
     setActiveProduct(draft.activeProduct);
     setGroupScaleOffset(draft.groupScaleOffset);
+    setCenterObjectWidth(Math.max(CENTER_OBJECT_MIN_WIDTH, Math.min(OBJECT_MAX_WIDTH, draft.centerObjectWidth)));
   }
 
   function changeTemplate(next: TemplateType) {
@@ -1283,6 +1294,20 @@ export default function Home() {
             </div>
             <section className="advanced-preview-settings">
               <div className="static-section-heading"><span>디자인 세부 조정</span><small>이미지 위치 · 크기</small></div>
+              {template === "center" && (
+                <div className="center-layout-width">
+                  <div className="center-layout-heading">
+                    <div><strong>중앙 오브젝트 영역 폭</strong><span>줄인 만큼 좌우 카피 영역이 자동으로 넓어집니다.</span></div>
+                    <b>{centerObjectWidth}px</b>
+                  </div>
+                  <label>
+                    <span>권장 최소 {CENTER_OBJECT_MIN_WIDTH}px</span>
+                    <input type="range" min={CENTER_OBJECT_MIN_WIDTH} max={OBJECT_MAX_WIDTH} step={1} value={centerObjectWidth} aria-label={`중앙 오브젝트 영역 폭 ${centerObjectWidth}px`} onChange={(event) => setCenterObjectWidth(Number(event.target.value))} />
+                    <span>공식 최대 {OBJECT_MAX_WIDTH}px</span>
+                  </label>
+                  <div className="center-layout-summary"><span>현재 좌우 카피 영역 각 <b>{centerCopyWidth}px</b></span><button type="button" onClick={() => setCenterObjectWidth(DEFAULT_CENTER_OBJECT_WIDTH)}>균형값 {DEFAULT_CENTER_OBJECT_WIDTH}px</button></div>
+                </div>
+              )}
               <div className="drag-toolbar">
                 <span>조정할 이미지</span>
                 <div className="layer-selector">
@@ -1336,7 +1361,7 @@ export default function Home() {
             <div className="preview-stage">
               <div className="creative-frame">
                 <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="카카오 비즈보드 소재 미리보기" />
-                {!product.image && !product2.image && <div className={`product-placeholder ${template} ${objectSide}`}>상품 이미지</div>}
+                {!product.image && !product2.image && <div className={`product-placeholder ${template} ${objectSide}`} style={{ left: `${currentProductBox.x / WIDTH * 100}%`, width: `${currentProductBox.width / WIDTH * 100}%` }}>상품 이미지</div>}
                 <div
                   className={`canvas-drag-surface ${isDragging ? "dragging" : ""}`}
                   onPointerDown={startObjectDrag}
@@ -1351,10 +1376,12 @@ export default function Home() {
                     <div className="guide-safe"><span>내부 지정영역 933×258</span></div>
                     {template === "center" ? (
                       <>
-                        <div className="guide-copy left"><span>좌측 카피 안전영역</span></div>
-                        <div className="guide-copy right"><span>우측 카피 안전영역</span></div>
-                        <div className="guide-gap left"><span>33px</span></div>
-                        <div className="guide-gap right"><span>33px</span></div>
+                        <div className="guide-copy left" style={{ left: `${SAFE_AREA.x / WIDTH * 100}%`, width: `${centerCopyWidth / WIDTH * 100}%` }}><span>좌측 카피 {centerCopyWidth}px</span></div>
+                        <div className="guide-copy right" style={{ right: `${(WIDTH - SAFE_AREA.x - SAFE_AREA.width) / WIDTH * 100}%`, width: `${centerCopyWidth / WIDTH * 100}%` }}><span>우측 카피 {centerCopyWidth}px</span></div>
+                        <div className="guide-gap left" style={{ left: `${(currentProductBox.x - MIN_COPY_OBJECT_GAP) / WIDTH * 100}%` }}><span>33px</span></div>
+                        <div className="guide-gap right" style={{ left: `${(currentProductBox.x + currentProductBox.width) / WIDTH * 100}%` }}><span>33px</span></div>
+                        <div className="guide-object-boundary max" style={{ left: `${(WIDTH - OBJECT_MAX_WIDTH) / 2 / WIDTH * 100}%`, width: `${OBJECT_MAX_WIDTH / WIDTH * 100}%` }}><span>공식 최대 438px</span></div>
+                        <div className="guide-object-boundary min" style={{ left: `${(WIDTH - CENTER_OBJECT_MIN_WIDTH) / 2 / WIDTH * 100}%`, width: `${CENTER_OBJECT_MIN_WIDTH / WIDTH * 100}%` }}><span>권장 최소 220px</span></div>
                       </>
                     ) : (
                       <>
@@ -1362,7 +1389,7 @@ export default function Home() {
                         <div className="guide-gap"><span>33px</span></div>
                       </>
                     )}
-                    <div className="guide-object"><span>오브젝트 최대영역 438×258</span>{template === "center" && <i className="object-half-line"><b>배너 중앙</b></i>}</div>
+                    <div className="guide-object" style={template === "center" ? { left: `${currentProductBox.x / WIDTH * 100}%`, width: `${currentProductBox.width / WIDTH * 100}%` } : undefined}><span>{template === "center" ? `현재 오브젝트 영역 ${centerObjectWidth}×258` : "오브젝트 최대영역 438×258"}</span>{template === "center" && <i className="object-half-line"><b>배너 중앙</b></i>}</div>
                     <div className="guide-ad"><span>광고주체</span></div>
                     {template === "badge" && badgeEnabled && <div className="guide-flag"><span>배지</span></div>}
                   </div>
@@ -1378,9 +1405,9 @@ export default function Home() {
             {showGuides && (
               <div className="guide-legend" role="note">
                 <span className="copy-key"><i />주황: 카피 안전영역</span>
-                <span className="object-key"><i />파랑: 오브젝트 최대영역</span>
+                <span className="object-key"><i />파랑: 현재 오브젝트 영역</span>
                 <span className="gap-key"><i />노랑: 최소 간격 33px</span>
-                <b>텍스트와 오브젝트는 각 허용영역 밖으로 나간 부분이 자동으로 잘립니다.</b>
+                <b>{template === "center" ? "점선은 권장 최소 220px·공식 최대 438px이며, 폭을 바꾸면 카피 영역도 함께 조절됩니다." : "텍스트와 오브젝트는 각 허용영역 밖으로 나간 부분이 자동으로 잘립니다."}</b>
               </div>
             )}
             <div className="preview-meta">
@@ -1399,7 +1426,7 @@ export default function Home() {
         <div className="guide-cards">
           <article><span>01</span><h3>광고주체 표기</h3>{template === "badge" ? <ul><li>기존 오브젝트 영역 안에서 반드시 표기합니다.</li><li>오브젝트 좌·우 정렬에 맞춰 하단 끝에 배치합니다.</li><li>카피·오브젝트의 가독성을 침범하지 않는 크기로 구성합니다.</li></ul> : <ul><li>중앙 오브젝트형에 한해 카피 영역 내 표기가 허용됩니다.</li><li>지정 영역 좌측 최상단 또는 우측 최상단 정렬만 가능합니다.</li><li>영역 내 자유 배치나 카피·오브젝트와의 밀착은 불가합니다.</li></ul>}</article>
           <article><span>02</span><h3>카피 가이드</h3>{template === "badge" ? <ul><li>메인·서브 카피는 각각 최대 1줄입니다.</li><li>메인은 Pretendard Bold, 39~51pt, #4C4C4C입니다.</li><li>서브는 Pretendard Regular, 39~51pt, #777777입니다.</li><li>서브와 배지는 각각 ON/OFF할 수 있으며, 배지 사용 시 1어절로 구성합니다.</li></ul> : <ul><li>좌·우 메인과 좌·우 서브는 각각 최대 1줄입니다.</li><li>메인·서브 모두 39~51pt 범위에서 1pt 단위로 조절합니다.</li><li>같은 카피 유형은 좌우 크기·굵기·색상을 동일하게 적용합니다.</li><li>좌·우 서브는 각각 ON/OFF하고 모든 카피의 정렬을 선택할 수 있습니다.</li></ul>}</article>
-          <article><span>03</span><h3>오브젝트·출력 가이드</h3>{template === "badge" ? <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트는 좌측 또는 우측에 두며 중앙 배열은 불가합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>카피·오브젝트가 허용영역을 넘으면 바깥 부분은 자동으로 잘립니다.</li></ul> : <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트 그룹을 소재 중앙 최대영역 안에 배치합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>좌우 카피·오브젝트가 허용영역을 넘으면 바깥 부분은 자동으로 잘립니다.</li></ul>}</article>
+          <article><span>03</span><h3>오브젝트·출력 가이드</h3>{template === "badge" ? <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트는 좌측 또는 우측에 두며 중앙 배열은 불가합니다.</li><li>두 이미지를 합친 오브젝트 그룹은 최대 438×258입니다.</li><li>카피·오브젝트가 허용영역을 넘으면 바깥 부분은 자동으로 잘립니다.</li></ul> : <ul><li>완성 규격은 1029×258, 내부 지정영역은 933×258입니다.</li><li>오브젝트 공식 최대 크기는 438×258이며, 메이커의 권장 최소 폭은 220px입니다.</li><li>중앙 오브젝트 폭을 줄이면 좌우 카피 영역이 같은 폭으로 자동 확대됩니다.</li><li>좌우 카피·오브젝트가 허용영역을 넘으면 바깥 부분은 자동으로 잘립니다.</li></ul>}</article>
         </div>
         <p className="review-note"><b>심사 유의사항</b> PNG-24/32, 300KB 이하로 등록해야 합니다. 본 완화 가이드는 카카오 제공 PSD 템플릿 사용을 전제로 하므로 최종 집행 전 PSD 템플릿과 모먼트 에셋 기준을 함께 확인하세요.</p>
       </section>
