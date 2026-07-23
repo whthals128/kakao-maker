@@ -7,14 +7,14 @@ export async function generateMetadata(): Promise<Metadata> {
   const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
   const protocol = requestHeaders.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
-  const title = "Kakao Maker | 카카오 비즈보드 소재 제작";
-  const description = "배지 플래그형과 중앙 오브젝트형 카카오 비즈보드 소재를 공식 1029×258 규격과 실시간 가이드 점검으로 제작합니다.";
+  const title = "Creative Maker | 광고 소재 제작 허브";
+  const description = "Focus Maker와 Kakao Maker를 한 곳에서 이용하고 채널별 광고 소재를 가이드에 맞춰 제작합니다.";
 
   return {
     title,
     description,
-    openGraph: { title, description, images: [{ url: `${origin}/og-kakao-maker.png`, width: 1536, height: 1024 }] },
-    twitter: { card: "summary_large_image", title, description, images: [`${origin}/og-kakao-maker.png`] },
+    openGraph: { title, description, images: [{ url: `${origin}/og-creative-maker.png`, width: 1536, height: 1024 }] },
+    twitter: { card: "summary_large_image", title, description, images: [`${origin}/og-creative-maker.png`] },
   };
 }
 
