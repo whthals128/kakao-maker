@@ -25,3 +25,28 @@ test("focus maker keeps the required 40px bottom margin", () => {
   );
   assert.equal(464 - (345 + 79), 40);
 });
+
+test("focus maker supports direct product dragging and wheel zoom", () => {
+  assert.match(focusMakerHtml, /productOffsetX:0,productOffsetY:0/);
+  assert.match(
+    focusMakerHtml,
+    /data-prop="productOffsetX" data-min="-126" data-max="126"/,
+  );
+  assert.match(focusMakerHtml, /addEventListener\('pointerdown'/);
+  assert.match(focusMakerHtml, /addEventListener\('pointermove'/);
+  assert.match(focusMakerHtml, /addEventListener\('wheel'/);
+  assert.match(focusMakerHtml, /event\.preventDefault\(\);zoomProduct/);
+  assert.match(focusMakerHtml, /id="productZoomOut"/);
+  assert.match(focusMakerHtml, /id="productZoomIn"/);
+  assert.match(focusMakerHtml, /id="productReset"/);
+});
+
+test("focus maker inline interaction script compiles", () => {
+  const scripts = [
+    ...focusMakerHtml.matchAll(/<script>([\s\S]*?)<\/script>/g),
+  ];
+  assert.equal(scripts.length, 2);
+  for (const script of scripts) {
+    assert.doesNotThrow(() => new Function(script[1]));
+  }
+});
